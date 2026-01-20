@@ -1,16 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
 import Tooltip from './Tooltip';
-
-// Dynamic import for markdown editor to avoid SSR issues
-const MDEditor = dynamic(
-  () => import('@uiw/react-md-editor').then((mod) => mod.default),
-  { ssr: false }
-);
 
 export default function Editor() {
   const { settings } = useSettings();
@@ -18,7 +11,7 @@ export default function Editor() {
   const [content, setContent] = useState<string>('');
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-review after pause
   useEffect(() => {
@@ -50,8 +43,8 @@ export default function Editor() {
     }
   }, [content, lastReviewedContent, state.suggestions.length, clearSuggestions]);
 
-  const handleChange = useCallback((value?: string) => {
-    setContent(value || '');
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
   }, []);
 
   const handleAccept = useCallback((id: string) => {
@@ -76,187 +69,100 @@ export default function Editor() {
 
   return (
     <div
-      ref={editorRef}
-      className="editor-container w-full h-screen"
-      data-color-mode={settings.theme === 'system' ? undefined : settings.theme}
+      className="editor-wrapper w-full min-h-screen"
+      style={{
+        background: 'var(--bg-primary)',
+      }}
     >
-      <style jsx global>{`
-        .editor-container {
-          --color-canvas-default: var(--bg-primary);
-          --color-canvas-subtle: var(--bg-secondary);
-          --color-border-default: var(--border-default);
-          --color-border-muted: var(--border-default);
-          --color-fg-default: var(--text-primary);
-          --color-fg-muted: var(--text-secondary);
-          --color-accent-fg: var(--accent-primary);
+      <div
+        className="editor-container mx-auto relative"
+        style={{
+          maxWidth: `${settings.editorWidth}px`,
+          padding: 'var(--editor-padding-y) var(--editor-padding-x)',
+          minHeight: '100vh',
+        }}
+      >
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleChange}
+          className="editor-textarea w-full resize-none border-none outline-none"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-primary)',
+            caretColor: 'var(--accent-primary)',
+            fontSize: `${settings.fontSize}px`,
+            lineHeight: settings.lineHeight,
+            fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
+            minHeight: 'calc(100vh - 128px)',
+            width: '100%',
+            display: 'block',
+          }}
+          placeholder="Start writing...
+
+Miku will review your writing after you pause for a few seconds.
+
+Tips:
+- Write naturally, Miku will suggest improvements
+- Click on highlighted text to see suggestions
+- Use the floating bar at the bottom for manual review
+
+Supported formats:
+- Plain text
+- Markdown (rendered in preview mode)
+"
+          spellCheck={false}
+          aria-label="Writing editor"
+        />
+
+        {/* Tooltip for active suggestion */}
+        {activeSuggestion && (
+          <Tooltip
+            suggestion={activeSuggestion}
+            onAccept={handleAccept}
+            onDismiss={handleDismiss}
+            onClose={() => setActiveSuggestion(null)}
+          />
+        )}
+      </div>
+
+      <style jsx>{`
+        .editor-textarea {
+          field-sizing: content;
         }
 
-        .w-md-editor {
-          background: var(--bg-primary) !important;
-          border: none !important;
-          box-shadow: none !important;
-          height: 100% !important;
-          min-height: 100vh !important;
+        .editor-textarea::placeholder {
+          color: var(--text-tertiary);
+          opacity: 0.7;
         }
 
-        .w-md-editor-toolbar {
-          background: var(--bg-secondary) !important;
-          border-bottom: 1px solid var(--border-default) !important;
-          padding: var(--space-2) var(--space-4) !important;
-          position: sticky !important;
-          top: 0 !important;
-          z-index: 10 !important;
+        .editor-textarea:focus {
+          outline: none;
         }
 
-        .w-md-editor-toolbar ul > li > button {
-          color: var(--text-secondary) !important;
-        }
-
-        .w-md-editor-toolbar ul > li > button:hover {
-          color: var(--text-primary) !important;
-          background: var(--bg-tertiary) !important;
-        }
-
-        .w-md-editor-toolbar ul > li.active > button {
-          color: var(--accent-primary) !important;
-        }
-
-        .w-md-editor-content {
-          background: var(--bg-primary) !important;
-          height: calc(100vh - 40px) !important;
-        }
-
-        .w-md-editor-area {
-          height: 100% !important;
-        }
-
-        .w-md-editor-text-pre,
-        .w-md-editor-text-input,
-        .w-md-editor-text {
-          font-size: ${settings.fontSize}px !important;
-          line-height: ${settings.lineHeight} !important;
-          font-family: ${settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)'} !important;
-          color: var(--text-primary) !important;
-          padding: var(--space-8) !important;
-          max-width: ${settings.editorWidth}px !important;
-          margin: 0 auto !important;
-        }
-
-        .w-md-editor-preview {
-          padding: var(--space-8) !important;
-          max-width: ${settings.editorWidth}px !important;
-          margin: 0 auto !important;
-          background: var(--bg-primary) !important;
-        }
-
-        .w-md-editor-preview .wmde-markdown {
-          font-size: ${settings.fontSize}px !important;
-          line-height: ${settings.lineHeight} !important;
-          font-family: var(--font-sans) !important;
-          color: var(--text-primary) !important;
-          background: transparent !important;
-        }
-
-        .wmde-markdown h1,
-        .wmde-markdown h2,
-        .wmde-markdown h3,
-        .wmde-markdown h4,
-        .wmde-markdown h5,
-        .wmde-markdown h6 {
-          color: var(--text-primary) !important;
-          border-bottom-color: var(--border-default) !important;
-        }
-
-        .wmde-markdown code {
-          background: var(--bg-tertiary) !important;
-          color: var(--text-primary) !important;
-          font-family: var(--font-mono) !important;
-        }
-
-        .wmde-markdown pre {
-          background: var(--bg-secondary) !important;
-          border: 1px solid var(--border-default) !important;
-        }
-
-        .wmde-markdown blockquote {
-          border-left-color: var(--accent-primary) !important;
-          color: var(--text-secondary) !important;
-        }
-
-        .wmde-markdown a {
-          color: var(--accent-primary) !important;
-        }
-
-        .wmde-markdown hr {
-          border-color: var(--border-default) !important;
-        }
-
-        .wmde-markdown table th,
-        .wmde-markdown table td {
-          border-color: var(--border-default) !important;
-        }
-
-        .wmde-markdown table tr {
-          background: var(--bg-primary) !important;
-        }
-
-        .wmde-markdown table tr:nth-child(2n) {
-          background: var(--bg-secondary) !important;
-        }
-
-        /* Hide scrollbar for cleaner look */
-        .w-md-editor-area {
+        /* Custom scrollbar */
+        .editor-wrapper {
           scrollbar-width: thin;
           scrollbar-color: var(--border-default) transparent;
         }
 
-        .w-md-editor-area::-webkit-scrollbar {
+        .editor-wrapper::-webkit-scrollbar {
           width: 8px;
         }
 
-        .w-md-editor-area::-webkit-scrollbar-track {
+        .editor-wrapper::-webkit-scrollbar-track {
           background: transparent;
         }
 
-        .w-md-editor-area::-webkit-scrollbar-thumb {
+        .editor-wrapper::-webkit-scrollbar-thumb {
           background: var(--border-default);
           border-radius: 4px;
         }
 
-        /* Caret color */
-        .w-md-editor-text-input {
-          caret-color: var(--accent-primary) !important;
-        }
-
-        /* Full height editor */
-        .w-md-editor-input {
-          height: 100% !important;
+        .editor-wrapper::-webkit-scrollbar-thumb:hover {
+          background: var(--text-tertiary);
         }
       `}</style>
-
-      <MDEditor
-        value={content}
-        onChange={handleChange}
-        preview="edit"
-        hideToolbar={false}
-        enableScroll={true}
-        visibleDragbar={false}
-        height="100%"
-        textareaProps={{
-          placeholder: 'Start writing...',
-          spellCheck: false,
-        }}
-      />
-
-      {/* Tooltip for active suggestion */}
-      {activeSuggestion && (
-        <Tooltip
-          suggestion={activeSuggestion}
-          onAccept={handleAccept}
-          onDismiss={handleDismiss}
-          onClose={() => setActiveSuggestion(null)}
-        />
-      )}
     </div>
   );
 }

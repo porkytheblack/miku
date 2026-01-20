@@ -90,3 +90,18 @@ export interface ReviewResponse {
   suggestions: Suggestion[];
   summary?: string;
 }
+
+// Default Agent Configuration
+export interface DefaultAgentConfig {
+  provider: AIProvider;
+  model: string;
+  apiKey: string;
+}
+
+// Environment-based defaults (can be overridden via .env.local)
+export const DEFAULT_AGENT_CONFIG: Partial<DefaultAgentConfig> = {
+  provider: (process.env.NEXT_PUBLIC_DEFAULT_AI_PROVIDER as AIProvider) || 'anthropic',
+  model: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'claude-sonnet-4-20250514',
+  // API key should be set via environment variable for security
+  apiKey: process.env.NEXT_PUBLIC_DEFAULT_AI_API_KEY || '',
+};

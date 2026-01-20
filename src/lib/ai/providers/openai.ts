@@ -1,63 +1,53 @@
+import OpenAI from 'openai';
 import { AIProviderInterface, Message, ToolDefinition, ProviderResponse, ToolCall } from '../types';
 
 export class OpenAIProvider implements AIProviderInterface {
-  private apiKey: string;
+  private client: OpenAI;
   private model: string;
-  private baseUrl: string;
 
   constructor(apiKey: string, model: string = 'gpt-4o') {
-    this.apiKey = apiKey;
+    this.client = new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true, // For client-side usage; prefer server-side in production
+    });
     this.model = model;
-    this.baseUrl = 'https://api.openai.com/v1';
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<ProviderResponse> {
-    const body: Record<string, unknown> = {
-      model: this.model,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
-    };
+    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = messages.map(m => ({
+      role: m.role as 'system' | 'user' | 'assistant',
+      content: m.content,
+    }));
 
-    if (tools && tools.length > 0) {
-      body.tools = tools.map(tool => ({
-        type: 'function',
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-        },
-      }));
-      body.tool_choice = 'auto';
-    }
-
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
+    const openaiTools: OpenAI.ChatCompletionTool[] | undefined = tools?.map(tool => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters as Record<string, unknown>,
       },
-      body: JSON.stringify(body),
+    }));
+
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: openaiMessages,
+      tools: openaiTools,
+      tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`OpenAI API error: ${error.error?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    const choice = data.choices[0];
+    const choice = response.choices[0];
     const message = choice.message;
 
     const toolCalls: ToolCall[] = [];
     if (message.tool_calls) {
       for (const tc of message.tool_calls) {
-        toolCalls.push({
-          id: tc.id,
-          name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments),
-        });
+        if (tc.type === 'function') {
+          toolCalls.push({
+            id: tc.id,
+            name: tc.function.name,
+            arguments: JSON.parse(tc.function.arguments),
+          });
+        }
       }
     }
 
@@ -69,66 +59,21 @@ export class OpenAIProvider implements AIProviderInterface {
     };
   }
 
-  async *streamChat(messages: Message[], tools?: ToolDefinition[]): AsyncGenerator<string, void, unknown> {
-    const body: Record<string, unknown> = {
+  async *streamChat(messages: Message[]): AsyncGenerator<string, void, unknown> {
+    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = messages.map(m => ({
+      role: m.role as 'system' | 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    const stream = await this.client.chat.completions.create({
       model: this.model,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
+      messages: openaiMessages,
       stream: true,
-    };
-
-    if (tools && tools.length > 0) {
-      body.tools = tools.map(tool => ({
-        type: 'function',
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-        },
-      }));
-    }
-
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`OpenAI API error: ${error.error?.message || response.statusText}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const content = data.choices[0]?.delta?.content;
-            if (content) yield content;
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) yield content;
     }
   }
 }

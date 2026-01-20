@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
-import { MikuState, AIProviderConfig, HighlightType } from '@/types';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
+import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG } from '@/types';
 import { createMikuAgent, MikuAgent } from '@/lib/ai/agent';
 import { analyzeSuggestions } from '@/lib/analyzer';
 
@@ -14,6 +14,7 @@ interface MikuContextType {
   clearSuggestions: () => void;
   setAIConfig: (config: AIProviderConfig | null) => void;
   aiConfig: AIProviderConfig | null;
+  isUsingDefaults: boolean;
 }
 
 const initialState: MikuState = {
@@ -28,14 +29,74 @@ const MikuContext = createContext<MikuContextType | undefined>(undefined);
 export function MikuProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MikuState>(initialState);
   const [aiConfig, setAIConfigState] = useState<AIProviderConfig | null>(null);
+  const [isUsingDefaults, setIsUsingDefaults] = useState(false);
   const agentRef = useRef<MikuAgent | null>(null);
+  const initializedRef = useRef(false);
+
+  // Initialize with defaults on mount
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    // Check for saved config first
+    try {
+      const savedConfig = localStorage.getItem('miku-ai-config');
+      const savedKeys = localStorage.getItem('miku-api-keys');
+
+      if (savedConfig && savedKeys) {
+        const config = JSON.parse(savedConfig);
+        const keys = JSON.parse(savedKeys);
+        const apiKey = keys[config.provider];
+
+        if (apiKey) {
+          setAIConfigState(config);
+          agentRef.current = createMikuAgent(config.provider, apiKey, config.model);
+          setIsUsingDefaults(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load saved config:', e);
+    }
+
+    // Fall back to environment defaults
+    if (DEFAULT_AGENT_CONFIG.apiKey && DEFAULT_AGENT_CONFIG.provider && DEFAULT_AGENT_CONFIG.model) {
+      const defaultConfig: AIProviderConfig = {
+        provider: DEFAULT_AGENT_CONFIG.provider,
+        model: DEFAULT_AGENT_CONFIG.model,
+        apiKey: DEFAULT_AGENT_CONFIG.apiKey,
+      };
+      setAIConfigState(defaultConfig);
+      agentRef.current = createMikuAgent(
+        defaultConfig.provider,
+        defaultConfig.apiKey,
+        defaultConfig.model
+      );
+      setIsUsingDefaults(true);
+    }
+  }, []);
 
   const setAIConfig = useCallback((config: AIProviderConfig | null) => {
     setAIConfigState(config);
+    setIsUsingDefaults(false);
     if (config) {
       agentRef.current = createMikuAgent(config.provider, config.apiKey, config.model);
+      // Save to localStorage
+      try {
+        localStorage.setItem('miku-ai-config', JSON.stringify({
+          provider: config.provider,
+          model: config.model,
+        }));
+      } catch (e) {
+        console.error('Failed to save config:', e);
+      }
     } else {
       agentRef.current = null;
+      try {
+        localStorage.removeItem('miku-ai-config');
+      } catch (e) {
+        console.error('Failed to clear config:', e);
+      }
     }
   }, []);
 
@@ -134,6 +195,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         clearSuggestions,
         setAIConfig,
         aiConfig,
+        isUsingDefaults,
       }}
     >
       {children}

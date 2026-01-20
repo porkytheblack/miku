@@ -1,173 +1,117 @@
+import { GoogleGenerativeAI, Content, SchemaType } from '@google/generative-ai';
 import { AIProviderInterface, Message, ToolDefinition, ProviderResponse, ToolCall } from '../types';
 
 export class GoogleProvider implements AIProviderInterface {
-  private apiKey: string;
+  private client: GoogleGenerativeAI;
   private model: string;
-  private baseUrl: string;
 
   constructor(apiKey: string, model: string = 'gemini-2.0-flash') {
-    this.apiKey = apiKey;
+    this.client = new GoogleGenerativeAI(apiKey);
     this.model = model;
-    this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   }
 
-  private convertMessagesToGemini(messages: Message[]): { contents: unknown[]; systemInstruction?: unknown } {
+  private convertMessagesToGemini(messages: Message[]): { contents: Content[]; systemInstruction?: string } {
     const systemMessage = messages.find(m => m.role === 'system');
     const otherMessages = messages.filter(m => m.role !== 'system');
 
-    const contents = otherMessages.map(m => ({
+    const contents: Content[] = otherMessages.map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));
 
     return {
       contents,
-      systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
+      systemInstruction: systemMessage?.content,
     };
   }
 
-  private convertToolsToGemini(tools: ToolDefinition[]): unknown[] {
-    return [{
-      functionDeclarations: tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: {
-          type: 'object',
-          properties: Object.fromEntries(
-            Object.entries(tool.parameters.properties).map(([key, value]) => [
-              key,
-              {
-                type: value.type.toUpperCase(),
-                description: value.description,
-                enum: value.enum,
-              },
-            ])
-          ),
-          required: tool.parameters.required,
-        },
-      })),
-    }];
+  private convertType(type: string): SchemaType {
+    switch (type.toLowerCase()) {
+      case 'string': return SchemaType.STRING;
+      case 'number': return SchemaType.NUMBER;
+      case 'integer': return SchemaType.INTEGER;
+      case 'boolean': return SchemaType.BOOLEAN;
+      case 'array': return SchemaType.ARRAY;
+      case 'object': return SchemaType.OBJECT;
+      default: return SchemaType.STRING;
+    }
   }
 
   async chat(messages: Message[], tools?: ToolDefinition[]): Promise<ProviderResponse> {
     const { contents, systemInstruction } = this.convertMessagesToGemini(messages);
 
-    const body: Record<string, unknown> = {
-      contents,
-    };
-
-    if (systemInstruction) {
-      body.systemInstruction = systemInstruction;
-    }
-
-    if (tools && tools.length > 0) {
-      body.tools = this.convertToolsToGemini(tools);
-    }
-
-    const response = await fetch(
-      `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    // Build tools configuration if provided
+    const toolsConfig = tools ? [{
+      functionDeclarations: tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: Object.fromEntries(
+            Object.entries(tool.parameters.properties).map(([key, value]) => [
+              key,
+              {
+                type: this.convertType(value.type),
+                description: value.description,
+                ...(value.enum ? { enum: value.enum } : {}),
+              } as Record<string, unknown>,
+            ])
+          ),
+          required: tool.parameters.required,
         },
-        body: JSON.stringify(body),
-      }
-    );
+      })),
+    }] : undefined;
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Google API error: ${error.error?.message || response.statusText}`);
-    }
+    const model = this.client.getGenerativeModel({
+      model: this.model,
+      systemInstruction,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: toolsConfig as any,
+    });
 
-    const data = await response.json();
-    const candidate = data.candidates?.[0];
-
-    if (!candidate) {
-      throw new Error('No response from Google API');
-    }
+    const result = await model.generateContent({ contents });
+    const response = result.response;
 
     const toolCalls: ToolCall[] = [];
     let textContent = '';
 
-    for (const part of candidate.content?.parts || []) {
-      if (part.text) {
-        textContent += part.text;
-      } else if (part.functionCall) {
-        toolCalls.push({
-          id: `gemini-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: part.functionCall.name,
-          arguments: part.functionCall.args || {},
-        });
+    for (const candidate of response.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        if ('text' in part && part.text) {
+          textContent += part.text;
+        } else if ('functionCall' in part && part.functionCall) {
+          toolCalls.push({
+            id: `gemini-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: part.functionCall.name,
+            arguments: (part.functionCall.args || {}) as Record<string, unknown>,
+          });
+        }
       }
     }
 
-    const finishReason = candidate.finishReason;
+    const finishReason = response.candidates?.[0]?.finishReason;
 
     return {
       content: textContent || null,
       toolCalls,
-      finishReason: finishReason === 'TOOL_CALLS' ? 'tool_calls' :
+      finishReason: toolCalls.length > 0 ? 'tool_calls' :
                     finishReason === 'MAX_TOKENS' ? 'length' : 'stop',
     };
   }
 
-  async *streamChat(messages: Message[], tools?: ToolDefinition[]): AsyncGenerator<string, void, unknown> {
+  async *streamChat(messages: Message[]): AsyncGenerator<string, void, unknown> {
     const { contents, systemInstruction } = this.convertMessagesToGemini(messages);
 
-    const body: Record<string, unknown> = {
-      contents,
-    };
+    const model = this.client.getGenerativeModel({
+      model: this.model,
+      systemInstruction,
+    });
 
-    if (systemInstruction) {
-      body.systemInstruction = systemInstruction;
-    }
+    const result = await model.generateContentStream({ contents });
 
-    if (tools && tools.length > 0) {
-      body.tools = this.convertToolsToGemini(tools);
-    }
-
-    const response = await fetch(
-      `${this.baseUrl}/models/${this.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Google API error: ${error.error?.message || response.statusText}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) yield text;
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) yield text;
     }
   }
 }
