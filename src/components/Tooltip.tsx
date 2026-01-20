@@ -54,17 +54,14 @@ export default function Tooltip({ suggestion, onAccept, onDismiss, onClose }: To
   return (
     <div
       ref={tooltipRef}
-      className="fixed z-50 animate-in fade-in slide-in-from-bottom-2"
+      className="z-50 animate-in fade-in slide-in-from-bottom-2"
       style={{
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
         maxWidth: '320px',
         width: 'calc(100vw - 32px)',
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border-default)',
         borderRadius: 'var(--radius-md)',
-        padding: 'var(--space-4)',
+        padding: 'var(--spacing-4)',
         boxShadow: 'var(--shadow-lg)',
       }}
       role="dialog"
