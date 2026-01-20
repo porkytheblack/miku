@@ -1,4 +1,10 @@
-import { Suggestion, HighlightType } from '@/types';
+import { Suggestion } from '@/types';
+
+// Helper to calculate line number from index
+function getLineNumber(text: string, index: number): number {
+  const textBeforeIndex = text.slice(0, index);
+  return (textBeforeIndex.match(/\n/g) || []).length + 1;
+}
 
 // Mock AI analysis - in a real app this would call an API
 export function analyzeSuggestions(text: string): Suggestion[] {
@@ -21,6 +27,7 @@ export function analyzeSuggestions(text: string): Suggestion[] {
       suggestions.push({
         id: `suggestion-${id++}`,
         type: 'clarity',
+        lineNumber: getLineNumber(text, startIndex),
         startIndex,
         endIndex: startIndex + trimmed.length,
         originalText: trimmed,
@@ -43,6 +50,7 @@ export function analyzeSuggestions(text: string): Suggestion[] {
       suggestions.push({
         id: `suggestion-${id++}`,
         type: 'style',
+        lineNumber: getLineNumber(text, context.startIndex),
         startIndex: context.startIndex,
         endIndex: context.endIndex,
         originalText: context.text,
@@ -72,6 +80,7 @@ export function analyzeSuggestions(text: string): Suggestion[] {
       suggestions.push({
         id: `suggestion-${id++}`,
         type: 'economy',
+        lineNumber: getLineNumber(text, match.index),
         startIndex: match.index,
         endIndex: match.index + match[0].length,
         originalText: match[0],
@@ -96,6 +105,7 @@ export function analyzeSuggestions(text: string): Suggestion[] {
       suggestions.push({
         id: `suggestion-${id++}`,
         type: 'grammar',
+        lineNumber: getLineNumber(text, context.startIndex),
         startIndex: context.startIndex,
         endIndex: context.endIndex,
         originalText: context.text,

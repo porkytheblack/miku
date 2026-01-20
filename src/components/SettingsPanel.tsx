@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '@/context/SettingsContext';
-import { Theme } from '@/types';
+import { useMiku } from '@/context/MikuContext';
+import { Theme, AIProvider, AI_MODELS } from '@/types';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -10,7 +11,34 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { settings, updateSettings } = useSettings();
+  const { setAIConfig, aiConfig } = useMiku();
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Local state for API keys (not saved until Apply is clicked)
+  const [apiKeys, setApiKeys] = useState<Record<AIProvider, string>>({
+    openai: '',
+    anthropic: '',
+    google: '',
+  });
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>(
+    aiConfig?.provider || 'openai'
+  );
+  const [selectedModel, setSelectedModel] = useState<string>(
+    aiConfig?.model || 'gpt-4o'
+  );
+
+  // Load saved API keys from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('miku-api-keys');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setApiKeys(prev => ({ ...prev, ...parsed }));
+      }
+    } catch (e) {
+      console.error('Failed to load API keys:', e);
+    }
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -34,6 +62,46 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     };
   }, [onClose]);
 
+  // Filter models by selected provider
+  const availableModels = AI_MODELS.filter(m => m.provider === selectedProvider);
+
+  // Update selected model when provider changes
+  useEffect(() => {
+    const currentModelProvider = AI_MODELS.find(m => m.id === selectedModel)?.provider;
+    if (currentModelProvider !== selectedProvider) {
+      const firstModel = availableModels[0];
+      if (firstModel) {
+        setSelectedModel(firstModel.id);
+      }
+    }
+  }, [selectedProvider, selectedModel, availableModels]);
+
+  const handleSaveAPIConfig = () => {
+    const apiKey = apiKeys[selectedProvider];
+    if (apiKey) {
+      // Save API keys to localStorage
+      try {
+        localStorage.setItem('miku-api-keys', JSON.stringify(apiKeys));
+      } catch (e) {
+        console.error('Failed to save API keys:', e);
+      }
+
+      // Set the AI config
+      setAIConfig({
+        provider: selectedProvider,
+        apiKey,
+        model: selectedModel,
+      });
+    }
+  };
+
+  const handleClearAPIConfig = () => {
+    setAIConfig(null);
+  };
+
+  const currentApiKey = apiKeys[selectedProvider];
+  const isConfigured = aiConfig !== null && aiConfig.provider === selectedProvider;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
@@ -43,7 +111,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         ref={panelRef}
         className="w-full max-w-md overflow-y-auto animate-in fade-in zoom-in-95"
         style={{
-          maxHeight: '80vh',
+          maxHeight: '85vh',
           background: 'var(--bg-secondary)',
           borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-lg)',
@@ -87,6 +155,185 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
         {/* Content */}
         <div className="p-4 space-y-6">
+          {/* AI Configuration section */}
+          <section>
+            <h3
+              className="mb-3"
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-medium)',
+              }}
+            >
+              AI Configuration
+            </h3>
+
+            {/* Provider selection */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Provider
+              </label>
+              <div className="flex gap-2">
+                {(['openai', 'anthropic', 'google'] as AIProvider[]).map(provider => (
+                  <button
+                    key={provider}
+                    onClick={() => setSelectedProvider(provider)}
+                    className="flex-1 py-2 px-3 rounded text-sm capitalize transition-colors"
+                    style={{
+                      background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    {provider === 'openai' ? 'OpenAI' : provider === 'anthropic' ? 'Anthropic' : 'Google'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Model selection */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Model
+              </label>
+              <select
+                value={selectedModel}
+                onChange={e => setSelectedModel(e.target.value)}
+                className="w-full p-2 rounded"
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                {availableModels.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* API Key input */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                API Key
+              </label>
+              <input
+                type="password"
+                value={currentApiKey}
+                onChange={e => setApiKeys(prev => ({ ...prev, [selectedProvider]: e.target.value }))}
+                placeholder={`Enter your ${selectedProvider === 'openai' ? 'OpenAI' : selectedProvider === 'anthropic' ? 'Anthropic' : 'Google'} API key`}
+                className="w-full p-2 rounded"
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              />
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                Your API key is stored locally and never sent to our servers.
+              </p>
+            </div>
+
+            {/* Save/Clear buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveAPIConfig}
+                disabled={!currentApiKey}
+                className="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors"
+                style={{
+                  background: currentApiKey ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: currentApiKey ? 'white' : 'var(--text-tertiary)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                  cursor: currentApiKey ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {isConfigured ? 'Update' : 'Apply'}
+              </button>
+              {aiConfig && (
+                <button
+                  onClick={handleClearAPIConfig}
+                  className="py-2 px-3 rounded text-sm font-medium transition-colors hover:bg-[var(--bg-tertiary)]"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Status indicator */}
+            {aiConfig && (
+              <div
+                className="mt-3 p-2 rounded flex items-center gap-2"
+                style={{
+                  background: 'var(--accent-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: 'var(--accent-primary)' }}
+                />
+                <span
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  Using {AI_MODELS.find(m => m.id === aiConfig.model)?.name || aiConfig.model}
+                </span>
+              </div>
+            )}
+          </section>
+
           {/* Appearance section */}
           <section>
             <h3
