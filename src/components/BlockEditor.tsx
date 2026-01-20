@@ -50,6 +50,7 @@ export default function BlockEditor() {
   const [slashFilter, setSlashFilter] = useState('');
   const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
   const [slashStartIndex, setSlashStartIndex] = useState<number | null>(null);
+  const [slashEndIndex, setSlashEndIndex] = useState<number | null>(null);
 
   // Sync scroll between textarea and highlight layer
   const syncScroll = useCallback(() => {
@@ -127,7 +128,7 @@ export default function BlockEditor() {
 
       const highlightText = content.slice(suggestion.startIndex, suggestion.endIndex);
       const isActive = suggestion.id === state.activeSuggestionId;
-      html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer; ${isActive ? 'outline: 2px solid var(--accent-primary);' : ''}">${escapeHtml(highlightText)}</mark>`;
+      html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer; pointer-events: auto; ${isActive ? 'outline: 2px solid var(--accent-primary);' : ''}">${escapeHtml(highlightText)}</mark>`;
 
       lastIndex = suggestion.endIndex;
     }
@@ -153,9 +154,11 @@ export default function BlockEditor() {
         // Close slash menu
         setShowSlashMenu(false);
         setSlashStartIndex(null);
+        setSlashEndIndex(null);
         setSlashFilter('');
       } else {
         setSlashFilter(textAfterSlash);
+        setSlashEndIndex(cursorPos);
       }
     }
   }, [slashStartIndex]);
@@ -184,6 +187,7 @@ export default function BlockEditor() {
         e.preventDefault();
         setShowSlashMenu(false);
         setSlashStartIndex(null);
+        setSlashEndIndex(null);
         setSlashFilter('');
         return;
       }
@@ -210,6 +214,8 @@ export default function BlockEditor() {
             left: rect.left + 24,
           });
           setSlashStartIndex(cursorPos);
+          // The slash hasn't been added yet, so end index will be cursorPos + 1 after it's typed
+          setSlashEndIndex(cursorPos + 1);
           setShowSlashMenu(true);
           setSlashFilter('');
           setSelectedSlashIndex(0);
@@ -222,11 +228,12 @@ export default function BlockEditor() {
     if (slashStartIndex === null || !textareaRef.current) return;
 
     const textarea = textareaRef.current;
-    const cursorPos = textarea.selectionStart;
+    // Use stored end index, or fall back to right after the slash
+    const endPos = slashEndIndex ?? (slashStartIndex + 1);
 
     // Remove the slash and any filter text
     const beforeSlash = content.slice(0, slashStartIndex);
-    const afterCursor = content.slice(cursorPos);
+    const afterCursor = content.slice(endPos);
 
     const newContent = beforeSlash + command.prefix + afterCursor;
     setContent(newContent);
@@ -241,8 +248,9 @@ export default function BlockEditor() {
 
     setShowSlashMenu(false);
     setSlashStartIndex(null);
+    setSlashEndIndex(null);
     setSlashFilter('');
-  }, [content, slashStartIndex]);
+  }, [content, slashStartIndex, slashEndIndex]);
 
   const handleHighlightClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -314,8 +322,8 @@ export default function BlockEditor() {
             whiteSpace: 'pre-wrap',
             wordWrap: 'break-word',
             overflow: 'hidden',
-            pointerEvents: state.suggestions.length > 0 ? 'auto' : 'none',
-            zIndex: 1,
+            pointerEvents: 'none',
+            zIndex: 3,
             ...editorStyles,
           }}
           dangerouslySetInnerHTML={{ __html: highlightedHTML }}
@@ -332,13 +340,12 @@ export default function BlockEditor() {
           style={{
             position: 'relative',
             background: 'transparent',
-            color: state.suggestions.length > 0 ? 'transparent' : 'var(--text-primary)',
+            color: 'var(--text-primary)',
             caretColor: 'var(--accent-primary)',
             minHeight: 'calc(100vh - 128px)',
             width: '100%',
             display: 'block',
             zIndex: 2,
-            WebkitTextFillColor: state.suggestions.length > 0 ? 'transparent' : 'var(--text-primary)',
             ...editorStyles,
           }}
           placeholder="Start writing...
