@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useSettings } from '@/context/SettingsContext';
-import Tooltip from './Tooltip';
-import { HighlightType } from '@/types';
+import { HighlightType, Suggestion } from '@/types';
 
 // Get highlight color for suggestion type
 function getHighlightColor(type: HighlightType): string {
@@ -24,6 +23,18 @@ function getHighlightColor(type: HighlightType): string {
   }
 }
 
+// Slash command options
+const SLASH_COMMANDS = [
+  { id: 'h1', label: 'Heading 1', icon: 'H1', prefix: '# ' },
+  { id: 'h2', label: 'Heading 2', icon: 'H2', prefix: '## ' },
+  { id: 'h3', label: 'Heading 3', icon: 'H3', prefix: '### ' },
+  { id: 'bullet', label: 'Bullet List', icon: '•', prefix: '- ' },
+  { id: 'numbered', label: 'Numbered List', icon: '1.', prefix: '1. ' },
+  { id: 'quote', label: 'Quote', icon: '"', prefix: '> ' },
+  { id: 'code', label: 'Code Block', icon: '<>', prefix: '```\n' },
+  { id: 'divider', label: 'Divider', icon: '—', prefix: '---\n' },
+];
+
 export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions } = useMiku();
@@ -32,8 +43,13 @@ export default function BlockEditor() {
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Slash command state
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 });
+  const [slashFilter, setSlashFilter] = useState('');
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
+  const [slashStartIndex, setSlashStartIndex] = useState<number | null>(null);
 
   // Sync scroll between textarea and highlight layer
   const syncScroll = useCallback(() => {
@@ -73,68 +89,169 @@ export default function BlockEditor() {
     }
   }, [content, lastReviewedContent, state.suggestions.length, clearSuggestions]);
 
+  // Filtered slash commands
+  const filteredCommands = useMemo(() => {
+    if (!slashFilter) return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter(cmd =>
+      cmd.label.toLowerCase().includes(slashFilter.toLowerCase()) ||
+      cmd.id.toLowerCase().includes(slashFilter.toLowerCase())
+    );
+  }, [slashFilter]);
+
+  // Reset selected index when filter changes
+  useEffect(() => {
+    setSelectedSlashIndex(0);
+  }, [slashFilter]);
+
   // Build highlighted content with suggestion markers
   const highlightedHTML = useMemo(() => {
     if (state.suggestions.length === 0 || !content) {
-      // Return escaped content for the backdrop
-      return escapeHtml(content) + '\n'; // Add newline to match textarea behavior
+      return escapeHtml(content) + '\n';
     }
 
-    // Sort suggestions by start index
     const sortedSuggestions = [...state.suggestions].sort((a, b) => a.startIndex - b.startIndex);
-
-    // Build segments with highlights
     let html = '';
     let lastIndex = 0;
 
     for (const suggestion of sortedSuggestions) {
-      // Skip invalid suggestions
       if (suggestion.startIndex < 0 || suggestion.endIndex > content.length || suggestion.startIndex >= suggestion.endIndex) {
         continue;
       }
-
-      // Skip overlapping suggestions
       if (suggestion.startIndex < lastIndex) {
         continue;
       }
 
-      // Add text before this suggestion
       if (suggestion.startIndex > lastIndex) {
         html += escapeHtml(content.slice(lastIndex, suggestion.startIndex));
       }
 
-      // Add the highlighted segment
       const highlightText = content.slice(suggestion.startIndex, suggestion.endIndex);
-      html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer;">${escapeHtml(highlightText)}</mark>`;
+      const isActive = suggestion.id === state.activeSuggestionId;
+      html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer; ${isActive ? 'outline: 2px solid var(--accent-primary);' : ''}">${escapeHtml(highlightText)}</mark>`;
 
       lastIndex = suggestion.endIndex;
     }
 
-    // Add remaining text after last suggestion
     if (lastIndex < content.length) {
       html += escapeHtml(content.slice(lastIndex));
     }
 
-    return html + '\n'; // Add newline to match textarea behavior
-  }, [content, state.suggestions]);
+    return html + '\n';
+  }, [content, state.suggestions, state.activeSuggestionId]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
-  }, []);
+    const newContent = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
+    setContent(newContent);
+
+    // Check for slash command
+    if (slashStartIndex !== null) {
+      // We're in slash command mode
+      const textAfterSlash = newContent.slice(slashStartIndex + 1, cursorPos);
+      if (textAfterSlash.includes(' ') || textAfterSlash.includes('\n') || cursorPos <= slashStartIndex) {
+        // Close slash menu
+        setShowSlashMenu(false);
+        setSlashStartIndex(null);
+        setSlashFilter('');
+      } else {
+        setSlashFilter(textAfterSlash);
+      }
+    }
+  }, [slashStartIndex]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle slash command menu
+    if (showSlashMenu) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSlashIndex(prev => Math.min(prev + 1, filteredCommands.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSlashIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        if (filteredCommands[selectedSlashIndex]) {
+          insertSlashCommand(filteredCommands[selectedSlashIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        setSlashStartIndex(null);
+        setSlashFilter('');
+        return;
+      }
+    }
+
+    // Detect slash at start of line
+    if (e.key === '/') {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const cursorPos = textarea.selectionStart;
+        const textBefore = content.slice(0, cursorPos);
+        const lineStart = textBefore.lastIndexOf('\n') + 1;
+        const lineContent = textBefore.slice(lineStart);
+
+        // Only show menu if slash is at start of line or after whitespace
+        if (lineContent.trim() === '') {
+          // Calculate position for the menu
+          const rect = textarea.getBoundingClientRect();
+          const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
+          const lines = textBefore.split('\n').length;
+
+          setSlashMenuPosition({
+            top: rect.top + (lines * lineHeight) - textarea.scrollTop + 24,
+            left: rect.left + 24,
+          });
+          setSlashStartIndex(cursorPos);
+          setShowSlashMenu(true);
+          setSlashFilter('');
+          setSelectedSlashIndex(0);
+        }
+      }
+    }
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content]);
+
+  const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
+    if (slashStartIndex === null || !textareaRef.current) return;
+
+    const textarea = textareaRef.current;
+    const cursorPos = textarea.selectionStart;
+
+    // Remove the slash and any filter text
+    const beforeSlash = content.slice(0, slashStartIndex);
+    const afterCursor = content.slice(cursorPos);
+
+    const newContent = beforeSlash + command.prefix + afterCursor;
+    setContent(newContent);
+
+    // Set cursor position after the inserted prefix
+    setTimeout(() => {
+      const newCursorPos = slashStartIndex + command.prefix.length;
+      textarea.selectionStart = newCursorPos;
+      textarea.selectionEnd = newCursorPos;
+      textarea.focus();
+    }, 0);
+
+    setShowSlashMenu(false);
+    setSlashStartIndex(null);
+    setSlashFilter('');
+  }, [content, slashStartIndex]);
 
   const handleHighlightClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'MARK') {
       const suggestionId = target.dataset.suggestionId;
       if (suggestionId) {
+        e.preventDefault();
+        e.stopPropagation();
         setActiveSuggestion(suggestionId);
-
-        // Position tooltip near the clicked element
-        const rect = target.getBoundingClientRect();
-        setTooltipPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 8,
-        });
       }
     }
   }, [setActiveSuggestion]);
@@ -151,18 +268,11 @@ export default function BlockEditor() {
     setContent(newContent);
     setLastReviewedContent('');
     acceptSuggestion(id);
-    setTooltipPosition(null);
   }, [content, state.suggestions, acceptSuggestion]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
-    setTooltipPosition(null);
   }, [dismissSuggestion]);
-
-  const handleCloseTooltip = useCallback(() => {
-    setActiveSuggestion(null);
-    setTooltipPosition(null);
-  }, [setActiveSuggestion]);
 
   const activeSuggestion = state.suggestions.find(s => s.id === state.activeSuggestionId);
 
@@ -180,7 +290,6 @@ export default function BlockEditor() {
       }}
     >
       <div
-        ref={containerRef}
         className="editor-container relative"
         style={{
           width: '100%',
@@ -189,7 +298,7 @@ export default function BlockEditor() {
           minHeight: '100vh',
         }}
       >
-        {/* Highlight backdrop layer - renders the colored highlights */}
+        {/* Highlight backdrop layer */}
         <div
           ref={highlightRef}
           className="highlight-backdrop"
@@ -206,6 +315,7 @@ export default function BlockEditor() {
             wordWrap: 'break-word',
             overflow: 'hidden',
             pointerEvents: state.suggestions.length > 0 ? 'auto' : 'none',
+            zIndex: 1,
             ...editorStyles,
           }}
           dangerouslySetInnerHTML={{ __html: highlightedHTML }}
@@ -216,17 +326,19 @@ export default function BlockEditor() {
           ref={textareaRef}
           value={content}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           onScroll={syncScroll}
           className="editor-textarea w-full resize-none border-none outline-none"
           style={{
             position: 'relative',
             background: 'transparent',
-            color: 'var(--text-primary)',
+            color: state.suggestions.length > 0 ? 'transparent' : 'var(--text-primary)',
             caretColor: 'var(--accent-primary)',
             minHeight: 'calc(100vh - 128px)',
             width: '100%',
             display: 'block',
             zIndex: 2,
+            WebkitTextFillColor: state.suggestions.length > 0 ? 'transparent' : 'var(--text-primary)',
             ...editorStyles,
           }}
           placeholder="Start writing...
@@ -235,29 +347,75 @@ Miku will review your writing after you pause for a few seconds.
 
 Tips:
 - Write naturally, Miku will suggest improvements
-- Highlighted text shows suggestions - click to see details
-- Use the floating bar at the bottom for manual review"
+- Type / at the start of a line for formatting options
+- Highlighted text shows suggestions - click to see details"
           spellCheck={false}
           aria-label="Writing editor"
         />
 
-        {/* Tooltip for active suggestion */}
-        {activeSuggestion && tooltipPosition && (
+        {/* Slash command menu */}
+        {showSlashMenu && (
           <div
+            className="slash-menu"
             style={{
               position: 'fixed',
-              left: tooltipPosition.x,
-              top: tooltipPosition.y,
-              transform: 'translateX(-50%)',
+              top: slashMenuPosition.top,
+              left: slashMenuPosition.left,
               zIndex: 1000,
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-lg)',
+              padding: 'var(--spacing-2)',
+              minWidth: '200px',
+              maxHeight: '300px',
+              overflowY: 'auto',
             }}
           >
-            <Tooltip
-              suggestion={activeSuggestion}
-              onAccept={handleAccept}
-              onDismiss={handleDismiss}
-              onClose={handleCloseTooltip}
-            />
+            <div style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+              Formatting
+            </div>
+            {filteredCommands.length === 0 ? (
+              <div style={{ padding: '8px', color: 'var(--text-tertiary)', fontSize: '14px' }}>
+                No commands found
+              </div>
+            ) : (
+              filteredCommands.map((cmd, index) => (
+                <button
+                  key={cmd.id}
+                  onClick={() => insertSlashCommand(cmd)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: 'none',
+                    background: index === selectedSlashIndex ? 'var(--bg-tertiary)' : 'transparent',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                  }}
+                >
+                  <span style={{
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                  }}>
+                    {cmd.icon}
+                  </span>
+                  <span>{cmd.label}</span>
+                </button>
+              ))
+            )}
           </div>
         )}
 
@@ -268,7 +426,7 @@ Tips:
           </div>
         )}
 
-        {state.status === 'ready' && state.suggestions.length > 0 && (
+        {state.status === 'ready' && state.suggestions.length > 0 && !activeSuggestion && (
           <div className="status-indicator">
             {state.suggestions.length} suggestion{state.suggestions.length !== 1 ? 's' : ''} - click highlighted text to review
           </div>
@@ -280,6 +438,16 @@ Tips:
           </div>
         )}
       </div>
+
+      {/* Suggestion panel - shows above floating bar when a suggestion is active */}
+      {activeSuggestion && (
+        <SuggestionPanel
+          suggestion={activeSuggestion}
+          onAccept={handleAccept}
+          onDismiss={handleDismiss}
+          onClose={() => setActiveSuggestion(null)}
+        />
+      )}
 
       <style jsx>{`
         .editor-textarea {
@@ -318,7 +486,6 @@ Tips:
           color: white;
         }
 
-        /* Custom scrollbar */
         .editor-wrapper {
           scrollbar-width: thin;
           scrollbar-color: var(--border-default) transparent;
@@ -341,6 +508,169 @@ Tips:
           background: var(--text-tertiary);
         }
       `}</style>
+    </div>
+  );
+}
+
+// Suggestion panel component - appears above the floating bar
+function SuggestionPanel({
+  suggestion,
+  onAccept,
+  onDismiss,
+  onClose,
+}: {
+  suggestion: Suggestion;
+  onAccept: (id: string) => void;
+  onDismiss: (id: string) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  const typeLabels: Record<HighlightType, string> = {
+    clarity: 'Clarity',
+    grammar: 'Grammar',
+    style: 'Style',
+    structure: 'Structure',
+    economy: 'Economy',
+  };
+
+  const typeColors: Record<HighlightType, string> = {
+    clarity: '#EAB308',
+    grammar: '#EF4444',
+    style: '#3B82F6',
+    structure: '#A855F7',
+    economy: '#22C55E',
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: 'fixed',
+        bottom: '100px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        maxWidth: '400px',
+        width: 'calc(100vw - 32px)',
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--spacing-4)',
+        boxShadow: 'var(--shadow-lg)',
+        zIndex: 200,
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <span
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: typeColors[suggestion.type],
+          }}
+        />
+        <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '14px' }}>
+          {typeLabels[suggestion.type]}
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            marginLeft: 'auto',
+            padding: '4px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 1l12 12M13 1L1 13" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Observation */}
+      <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5', marginBottom: '12px' }}>
+        {suggestion.observation}
+      </p>
+
+      {/* Original text */}
+      <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginBottom: '4px' }}>Original:</p>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', color: 'var(--text-primary)' }}>
+          {suggestion.originalText}
+        </p>
+      </div>
+
+      {/* Suggested revision */}
+      {suggestion.suggestedRevision !== suggestion.originalText && (
+        <div style={{ background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginBottom: '4px' }}>Suggested:</p>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', color: 'var(--text-primary)' }}>
+            {suggestion.suggestedRevision}
+          </p>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          onClick={() => onAccept(suggestion.id)}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            background: 'var(--accent-primary)',
+            color: 'white',
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '14px',
+          }}
+        >
+          Accept
+        </button>
+        <button
+          onClick={() => onDismiss(suggestion.id)}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            fontWeight: 500,
+            fontSize: '14px',
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }
