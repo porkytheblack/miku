@@ -35,15 +35,16 @@ const ClerkAuthBridge = isClerkConfigured
   : null;
 
 function Providers({ children }: { children: React.ReactNode }) {
+  // AuthProvider must wrap MikuProvider so that MikuContext can access auth state
   const content = (
     <SettingsProvider>
-      <MikuProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <MikuProvider>
           <NotesProvider>
             {children}
           </NotesProvider>
-        </AuthProvider>
-      </MikuProvider>
+        </MikuProvider>
+      </AuthProvider>
     </SettingsProvider>
   );
 
@@ -70,7 +71,14 @@ export default function RootLayout({
 
   // Only wrap with ClerkProvider if Clerk is configured
   if (ClerkProvider) {
-    return <ClerkProvider>{content}</ClerkProvider>;
+    return (
+      <ClerkProvider
+        signInFallbackRedirectUrl="/editor"
+        signUpFallbackRedirectUrl="/editor"
+      >
+        {content}
+      </ClerkProvider>
+    );
   }
 
   return content;

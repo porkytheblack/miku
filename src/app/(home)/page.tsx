@@ -81,53 +81,63 @@ export default function HomePage() {
         />
       )}
 
-      {/* Header */}
-      <header className="w-full p-6 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent-primary)' }}
-          >
-            <span className="text-white font-bold text-sm">M</span>
-          </div>
-          <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            Miku
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
+      {/* Floating Header Bar */}
+      <header className="w-full p-6 flex justify-center">
+        <div
+          className="flex items-center gap-3 px-4 py-2 rounded-full"
+          style={{
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-default)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+          }}
+        >
           {isClerkConfigured && isSignedIn && UserButton ? (
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: 'w-8 h-8',
-                },
-              }}
-            />
-          ) : isClerkConfigured && SignInButton ? (
-            <SignInButton mode="modal">
-              <button
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+            <>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                  },
+                }}
+              />
+              <Link
+                href="/editor"
+                className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
                 style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-default)',
-                  color: 'var(--text-secondary)',
+                  background: 'var(--accent-primary)',
+                  color: 'white',
                 }}
               >
-                Sign In
-              </button>
-            </SignInButton>
-          ) : null}
-          <Link
-            href="/editor"
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
-            style={{
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-default)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            Open Editor
-          </Link>
+                Open Editor
+              </Link>
+            </>
+          ) : (
+            <>
+              {isClerkConfigured && SignInButton ? (
+                <SignInButton mode="modal">
+                  <button
+                    className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    Sign In
+                  </button>
+                </SignInButton>
+              ) : null}
+              <Link
+                href="/editor"
+                className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
+                style={{
+                  background: 'var(--accent-primary)',
+                  color: 'white',
+                }}
+              >
+                Open Editor
+              </Link>
+            </>
+          )}
         </div>
       </header>
 

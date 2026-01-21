@@ -31,6 +31,19 @@ export const noteHistory = pgTable('note_history', {
   version: integer('version').notNull().default(1),
 });
 
+// User preferences - stores API keys and model choices
+export const userPreferences = pgTable('user_preferences', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  // AI Configuration
+  selectedProvider: varchar('selected_provider', { length: 50 }).default('openai'),
+  selectedModel: varchar('selected_model', { length: 100 }).default('gpt-4o'),
+  // Encrypted API keys (stored as JSON object)
+  apiKeys: jsonb('api_keys').$type<{ openai?: string; anthropic?: string; google?: string }>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Types for database operations
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -40,3 +53,6 @@ export type NewNote = typeof notes.$inferInsert;
 
 export type NoteHistory = typeof noteHistory.$inferSelect;
 export type NewNoteHistory = typeof noteHistory.$inferInsert;
+
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type NewUserPreferences = typeof userPreferences.$inferInsert;
