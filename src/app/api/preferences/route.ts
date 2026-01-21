@@ -1,7 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { db, userPreferences } from '@/lib/db';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { db, userPreferences, users } from '@/lib/db';
 import { eq } from 'drizzle-orm';
+
+// Helper to ensure user exists in database (creates if not exists)
+async function ensureUserExists(userId: string): Promise<boolean> {
+  if (!db) return false;
+
+  try {
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!existingUser) {
+      // Get user info from Clerk
+      const user = await currentUser();
+      if (!user) return false;
+
+      const email = user.emailAddresses?.[0]?.emailAddress;
+      if (!email) return false;
+
+      const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
+
+      await db.insert(users).values({
+        id: userId,
+        email,
+        name,
+        imageUrl: user.imageUrl,
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Failed to ensure user exists:', error);
+    return false;
+  }
+}
 
 // GET /api/preferences - Get user preferences
 export async function GET() {
@@ -52,6 +87,12 @@ export async function POST(request: NextRequest) {
 
     if (!db) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    }
+
+    // Ensure user exists in database before creating preferences
+    const userExists = await ensureUserExists(userId);
+    if (!userExists) {
+      return NextResponse.json({ error: 'Failed to sync user' }, { status: 500 });
     }
 
     const body = await request.json();
