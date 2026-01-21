@@ -43,6 +43,14 @@ const SLASH_COMMANDS = [
   { id: 'divider', label: 'Divider', icon: '—', prefix: '---\n' },
 ];
 
+// Track accepted revisions for undo and to exclude from future reviews
+interface AcceptedRevision {
+  id: string;
+  originalText: string;
+  revisedText: string;
+  position: number; // Position in document when accepted
+}
+
 export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
@@ -56,6 +64,17 @@ export default function BlockEditor() {
   // Track the content that was used for the last review
   // This is the "source of truth" for suggestion positions
   const reviewedContentRef = useRef<string>('');
+
+  // Track accepted revisions for undo functionality
+  const [acceptedRevisions, setAcceptedRevisions] = useState<AcceptedRevision[]>([]);
+
+  // Expose preview mode and undo to parent (FloatingBar)
+  const [canUndo, setCanUndo] = useState(false);
+
+  // Update canUndo when acceptedRevisions changes
+  useEffect(() => {
+    setCanUndo(acceptedRevisions.length > 0);
+  }, [acceptedRevisions]);
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -73,19 +92,44 @@ export default function BlockEditor() {
     }
   }, []);
 
+  // Build content for review, excluding recently accepted revisions
+  const getContentForReview = useCallback(() => {
+    if (acceptedRevisions.length === 0) return content;
+
+    // Create a version of content that marks accepted revisions
+    // We'll add markers that the AI should skip
+    let reviewContent = content;
+    const exclusions: string[] = [];
+
+    // Collect all accepted revision texts that are still in the document
+    for (const revision of acceptedRevisions) {
+      if (content.includes(revision.revisedText)) {
+        exclusions.push(revision.revisedText);
+      }
+    }
+
+    if (exclusions.length > 0) {
+      // Add a note to the content about what to skip
+      reviewContent = `[Note: The following text segments have already been reviewed and accepted. Please do not suggest changes to them: ${exclusions.map(e => `"${e}"`).join(', ')}]\n\n${content}`;
+    }
+
+    return reviewContent;
+  }, [content, acceptedRevisions]);
+
   // Manual review function
   const triggerManualReview = useCallback(() => {
     if (content.trim()) {
       // Store the content being reviewed so we can adjust positions later
       reviewedContentRef.current = content;
-      requestReview(content, {
+      const reviewContent = getContentForReview();
+      requestReview(reviewContent, {
         aggressiveness: settings.aggressiveness,
         writingContext: settings.writingContext,
         forceReview: true, // Force review even if content was reviewed before
       });
       setLastReviewedContent(content);
     }
-  }, [content, requestReview, settings.aggressiveness, settings.writingContext]);
+  }, [content, requestReview, settings.aggressiveness, settings.writingContext, getContentForReview]);
 
   // Auto-review after pause (only in auto mode)
   useEffect(() => {
@@ -98,7 +142,8 @@ export default function BlockEditor() {
       pauseTimeoutRef.current = setTimeout(() => {
         // Store the content being reviewed so we can adjust positions later
         reviewedContentRef.current = content;
-        requestReview(content, {
+        const reviewContent = getContentForReview();
+        requestReview(reviewContent, {
           aggressiveness: settings.aggressiveness,
           writingContext: settings.writingContext,
         });
@@ -111,7 +156,7 @@ export default function BlockEditor() {
         clearTimeout(pauseTimeoutRef.current);
       }
     };
-  }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext]);
+  }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext, getContentForReview]);
 
   // Adjust suggestion positions when content changes after a review
   // Only run when content changes, not when suggestions change
@@ -377,14 +422,68 @@ export default function BlockEditor() {
       suggestion.suggestedRevision +
       content.slice(endIndex);
 
+    // Track this revision for undo
+    setAcceptedRevisions(prev => [...prev, {
+      id: suggestion.id,
+      originalText: suggestion.originalText,
+      revisedText: suggestion.suggestedRevision,
+      position: startIndex,
+    }]);
+
     setContent(newContent);
     setLastReviewedContent('');
     acceptSuggestion(id);
   }, [content, state.suggestions, acceptSuggestion]);
 
+  // Undo the last accepted suggestion
+  const handleUndo = useCallback(() => {
+    if (acceptedRevisions.length === 0) return;
+
+    const lastRevision = acceptedRevisions[acceptedRevisions.length - 1];
+
+    // Find the revised text in the current content
+    const foundIndex = content.indexOf(lastRevision.revisedText);
+    if (foundIndex === -1) {
+      // Can't find the revised text - just remove from history
+      setAcceptedRevisions(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Replace the revised text with the original
+    const newContent =
+      content.slice(0, foundIndex) +
+      lastRevision.originalText +
+      content.slice(foundIndex + lastRevision.revisedText.length);
+
+    setContent(newContent);
+    setAcceptedRevisions(prev => prev.slice(0, -1));
+    setLastReviewedContent('');
+  }, [content, acceptedRevisions]);
+
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
   }, [dismissSuggestion]);
+
+  // Listen for events from FloatingBar
+  useEffect(() => {
+    const handleUndoEvent = () => handleUndo();
+    const handlePreviewToggle = () => setIsPreviewMode(prev => !prev);
+
+    window.addEventListener('miku:undo', handleUndoEvent);
+    window.addEventListener('miku:togglePreview', handlePreviewToggle);
+
+    return () => {
+      window.removeEventListener('miku:undo', handleUndoEvent);
+      window.removeEventListener('miku:togglePreview', handlePreviewToggle);
+    };
+  }, [handleUndo]);
+
+  // Emit state changes so FloatingBar can update
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('miku:editorState', {
+      detail: { canUndo, isPreviewMode }
+    }));
+  }, [canUndo, isPreviewMode]);
 
   const activeSuggestion = state.suggestions.find(s => s.id === state.activeSuggestionId);
 
@@ -401,92 +500,6 @@ export default function BlockEditor() {
         background: 'var(--bg-primary)',
       }}
     >
-      {/* Top toolbar with preview toggle and review button */}
-      <div
-        className="editor-toolbar"
-        style={{
-          position: 'fixed',
-          top: 'var(--spacing-4)',
-          right: 'var(--spacing-4)',
-          display: 'flex',
-          gap: 'var(--spacing-2)',
-          zIndex: 100,
-        }}
-      >
-        {/* Review button (only in manual mode) */}
-        {settings.reviewMode === 'manual' && (
-          <button
-            onClick={triggerManualReview}
-            disabled={state.status === 'thinking' || !content.trim()}
-            title="Review (Cmd+Enter)"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              background: state.status === 'thinking' ? 'var(--bg-tertiary)' : 'var(--accent-primary)',
-              color: state.status === 'thinking' ? 'var(--text-tertiary)' : 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              cursor: state.status === 'thinking' || !content.trim() ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              fontWeight: 500,
-              boxShadow: 'var(--shadow-md)',
-            }}
-          >
-            {state.status === 'thinking' ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
-                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
-                </svg>
-                Reviewing...
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 12l2 2 4-4" />
-                  <circle cx="12" cy="12" r="10" />
-                </svg>
-                Review
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Preview toggle button */}
-        <button
-          onClick={() => setIsPreviewMode(!isPreviewMode)}
-          title={isPreviewMode ? 'Edit' : 'Preview'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '40px',
-            height: '40px',
-            background: isPreviewMode ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-            color: isPreviewMode ? 'white' : 'var(--text-secondary)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          {isPreviewMode ? (
-            // Edit icon (pencil)
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-          ) : (
-            // Eye icon for preview
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          )}
-        </button>
-      </div>
-
       <div
         className="editor-container relative"
         style={{
@@ -501,7 +514,6 @@ export default function BlockEditor() {
           <div
             className="preview-container"
             style={{
-              paddingTop: '60px', // Space for toolbar
               ...editorStyles,
             }}
           >

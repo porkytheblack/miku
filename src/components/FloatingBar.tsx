@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import SettingsPanel from './SettingsPanel';
 
@@ -8,6 +8,21 @@ export default function FloatingBar() {
   const { state, requestReview } = useMiku();
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  // Listen for editor state changes
+  useEffect(() => {
+    const handleEditorState = (e: CustomEvent<{ canUndo: boolean; isPreviewMode: boolean }>) => {
+      setCanUndo(e.detail.canUndo);
+      setIsPreviewMode(e.detail.isPreviewMode);
+    };
+
+    window.addEventListener('miku:editorState', handleEditorState as EventListener);
+    return () => {
+      window.removeEventListener('miku:editorState', handleEditorState as EventListener);
+    };
+  }, []);
 
   const isVisible = isHovered || state.status !== 'idle' || showSettings;
 
@@ -17,6 +32,14 @@ export default function FloatingBar() {
       requestReview((editor as HTMLTextAreaElement).value);
     }
   }, [requestReview]);
+
+  const handleUndo = useCallback(() => {
+    window.dispatchEvent(new Event('miku:undo'));
+  }, []);
+
+  const handleTogglePreview = useCallback(() => {
+    window.dispatchEvent(new Event('miku:togglePreview'));
+  }, []);
 
   return (
     <>
@@ -49,6 +72,54 @@ export default function FloatingBar() {
             height: '40px',
           }}
         >
+          {/* Preview toggle button */}
+          <button
+            onClick={handleTogglePreview}
+            className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
+            aria-label={isPreviewMode ? 'Edit' : 'Preview'}
+            title={isPreviewMode ? 'Edit (exit preview)' : 'Preview'}
+          >
+            {isPreviewMode ? (
+              // Edit icon (pencil)
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ color: 'var(--accent-primary)' }}
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            ) : (
+              // Eye icon for preview
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+
+          {/* Divider */}
+          <div
+            className="w-px h-4"
+            style={{ background: 'var(--border-default)' }}
+          />
+
           {/* Status indicator */}
           <StatusIndicator status={state.status} suggestionCount={state.suggestions.length} />
 
@@ -66,6 +137,38 @@ export default function FloatingBar() {
           >
             Review
           </button>
+
+          {/* Undo button - only show when there's something to undo */}
+          {canUndo && (
+            <>
+              {/* Divider */}
+              <div
+                className="w-px h-4"
+                style={{ background: 'var(--border-default)' }}
+              />
+              <button
+                onClick={handleUndo}
+                className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
+                aria-label="Undo last change"
+                title="Undo last accepted suggestion"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <path d="M3 7v6h6" />
+                  <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                </svg>
+              </button>
+            </>
+          )}
 
           {/* Divider */}
           <div
