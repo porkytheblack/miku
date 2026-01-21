@@ -75,6 +75,7 @@ export default function RootLayout({
       <ClerkProvider
         signInFallbackRedirectUrl="/editor"
         signUpFallbackRedirectUrl="/editor"
+        afterSignOutUrl="/"
       >
         {content}
       </ClerkProvider>

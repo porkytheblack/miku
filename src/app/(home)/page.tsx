@@ -1,17 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useAuth, isClerkConfigured } from '@/components/AuthProvider';
 
 // Dynamically import Clerk components
 const SignInButton = isClerkConfigured
   ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.SignInButton), { ssr: false })
-  : null;
-
-const UserButton = isClerkConfigured
-  ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.UserButton), { ssr: false })
   : null;
 
 // Floating highlight that appears and fades
@@ -39,9 +35,17 @@ function FloatingHighlight({ color, delay, children }: { color: string; delay: n
 
 export default function HomePage() {
   const { isSignedIn } = useAuth();
+  const router = useRouter();
   const [showHighlights, setShowHighlights] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [showCursor, setShowCursor] = useState(false);
+
+  // Redirect signed-in users to editor
+  useEffect(() => {
+    if (isSignedIn) {
+      router.push('/editor');
+    }
+  }, [isSignedIn, router]);
 
   useEffect(() => {
     // Start showing highlights after a delay
@@ -60,6 +64,24 @@ export default function HomePage() {
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
+
+  // Show loading state while redirecting signed-in users
+  if (isSignedIn) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--bg-primary)' }}
+      >
+        <div className="text-center">
+          <div
+            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
+          />
+          <p style={{ color: 'var(--text-secondary)' }}>Opening editor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -91,52 +113,25 @@ export default function HomePage() {
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
           }}
         >
-          {isClerkConfigured && isSignedIn && UserButton ? (
-            <>
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  },
-                }}
-              />
-              <Link
-                href="/editor"
+          {isClerkConfigured && SignInButton ? (
+            <SignInButton mode="modal">
+              <button
                 className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
                 style={{
                   background: 'var(--accent-primary)',
                   color: 'white',
                 }}
               >
-                Open Editor
-              </Link>
-            </>
+                Sign In to Start
+              </button>
+            </SignInButton>
           ) : (
-            <>
-              {isClerkConfigured && SignInButton ? (
-                <SignInButton mode="modal">
-                  <button
-                    className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
-                    style={{
-                      background: 'transparent',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    Sign In
-                  </button>
-                </SignInButton>
-              ) : null}
-              <Link
-                href="/editor"
-                className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
-                style={{
-                  background: 'var(--accent-primary)',
-                  color: 'white',
-                }}
-              >
-                Open Editor
-              </Link>
-            </>
+            <span
+              className="px-4 py-2 text-sm"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              Sign-in not configured
+            </span>
           )}
         </div>
       </header>
@@ -229,37 +224,28 @@ export default function HomePage() {
 
           {/* CTA */}
           <div className="flex flex-col gap-4 justify-center items-center mt-8">
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link
-                href="/editor"
-                className="px-6 py-3 rounded-lg text-base font-medium transition-all hover:scale-105 hover:shadow-lg"
-                style={{
-                  background: 'var(--accent-primary)',
-                  color: 'white',
-                }}
-              >
-                Start Writing
-              </Link>
-              {isClerkConfigured && !isSignedIn && SignInButton && (
-                <SignInButton mode="modal">
-                  <button
-                    className="px-6 py-3 rounded-lg text-base font-medium transition-all hover:scale-105"
-                    style={{
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-default)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    Sign In to Save Notes
-                  </button>
-                </SignInButton>
-              )}
-            </div>
+            {isClerkConfigured && SignInButton ? (
+              <SignInButton mode="modal">
+                <button
+                  className="px-8 py-4 rounded-lg text-lg font-medium transition-all hover:scale-105 hover:shadow-lg"
+                  style={{
+                    background: 'var(--accent-primary)',
+                    color: 'white',
+                  }}
+                >
+                  Get Started — Sign In
+                </button>
+              </SignInButton>
+            ) : (
+              <p style={{ color: 'var(--text-tertiary)' }}>
+                Authentication is required to use Miku
+              </p>
+            )}
             <span
               className="text-sm"
               style={{ color: 'var(--text-tertiary)' }}
             >
-              {isSignedIn ? 'Your notes are synced' : 'No account required to write'}
+              Create a free account to start writing
             </span>
           </div>
         </div>
