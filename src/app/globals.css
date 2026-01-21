@@ -159,7 +159,7 @@ html {
 }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-family: var(--font-sans);
   min-height: 100%;
