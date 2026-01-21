@@ -2,6 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+import { useAuth, isClerkConfigured } from '@/components/AuthProvider';
+
+// Dynamically import Clerk components
+const SignInButton = isClerkConfigured
+  ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.SignInButton), { ssr: false })
+  : null;
+
+const UserButton = isClerkConfigured
+  ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.UserButton), { ssr: false })
+  : null;
 
 // Floating highlight that appears and fades
 function FloatingHighlight({ color, delay, children }: { color: string; delay: number; children: React.ReactNode }) {
@@ -27,6 +38,7 @@ function FloatingHighlight({ color, delay, children }: { color: string; delay: n
 }
 
 export default function HomePage() {
+  const { isSignedIn } = useAuth();
   const [showHighlights, setShowHighlights] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [showCursor, setShowCursor] = useState(false);
@@ -82,17 +94,41 @@ export default function HomePage() {
             Miku
           </span>
         </div>
-        <Link
-          href="/editor"
-          className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
-          style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-default)',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Open Editor
-        </Link>
+        <div className="flex items-center gap-3">
+          {isClerkConfigured && isSignedIn && UserButton ? (
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: 'w-8 h-8',
+                },
+              }}
+            />
+          ) : isClerkConfigured && SignInButton ? (
+            <SignInButton mode="modal">
+              <button
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+                style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-default)',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                Sign In
+              </button>
+            </SignInButton>
+          ) : null}
+          <Link
+            href="/editor"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            Open Editor
+          </Link>
+        </div>
       </header>
 
       {/* Main content */}
@@ -182,22 +218,38 @@ export default function HomePage() {
           </div>
 
           {/* CTA */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-8">
-            <Link
-              href="/editor"
-              className="px-6 py-3 rounded-lg text-base font-medium transition-all hover:scale-105 hover:shadow-lg"
-              style={{
-                background: 'var(--accent-primary)',
-                color: 'white',
-              }}
-            >
-              Start Writing
-            </Link>
+          <div className="flex flex-col gap-4 justify-center items-center mt-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link
+                href="/editor"
+                className="px-6 py-3 rounded-lg text-base font-medium transition-all hover:scale-105 hover:shadow-lg"
+                style={{
+                  background: 'var(--accent-primary)',
+                  color: 'white',
+                }}
+              >
+                Start Writing
+              </Link>
+              {isClerkConfigured && !isSignedIn && SignInButton && (
+                <SignInButton mode="modal">
+                  <button
+                    className="px-6 py-3 rounded-lg text-base font-medium transition-all hover:scale-105"
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-default)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    Sign In to Save Notes
+                  </button>
+                </SignInButton>
+              )}
+            </div>
             <span
               className="text-sm"
               style={{ color: 'var(--text-tertiary)' }}
             >
-              No account required
+              {isSignedIn ? 'Your notes are synced' : 'No account required to write'}
             </span>
           </div>
         </div>

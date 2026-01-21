@@ -139,7 +139,7 @@ export default function NotesModal({ isOpen, onClose, onLoadNote }: NotesModalPr
       >
         {/* Header */}
         <div
-          className="flex items-center gap-3 px-4 py-3"
+          className="flex items-center gap-4 px-5 py-4"
           style={{
             borderBottom: '1px solid var(--border-default)',
           }}
