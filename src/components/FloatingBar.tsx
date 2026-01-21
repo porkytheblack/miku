@@ -2,14 +2,24 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useMiku } from '@/context/MikuContext';
+import { useDocument } from '@/context/DocumentContext';
+import { isTauri } from '@/lib/tauri';
 import SettingsPanel from './SettingsPanel';
 
 export default function FloatingBar() {
   const { state, requestReview } = useMiku();
+  const { document, openDocument, saveDocument, newDoc } = useDocument();
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFileMenu, setShowFileMenu] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [inTauri, setInTauri] = useState(false);
+
+  // Check if running in Tauri
+  useEffect(() => {
+    setInTauri(isTauri());
+  }, []);
 
   // Listen for editor state changes
   useEffect(() => {
@@ -24,10 +34,34 @@ export default function FloatingBar() {
     };
   }, []);
 
-  const isVisible = isHovered || state.status !== 'idle' || showSettings;
+  // Listen for keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + N: New document
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault();
+        newDoc();
+      }
+      // Cmd/Ctrl + O: Open document
+      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+        e.preventDefault();
+        openDocument();
+      }
+      // Cmd/Ctrl + S: Save document
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        saveDocument();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [newDoc, openDocument, saveDocument]);
+
+  const isVisible = isHovered || state.status !== 'idle' || showSettings || showFileMenu;
 
   const handleManualReview = useCallback(() => {
-    const editor = document.querySelector('textarea');
+    const editor = window.document.querySelector('textarea');
     if (editor) {
       requestReview((editor as HTMLTextAreaElement).value);
     }
@@ -72,6 +106,104 @@ export default function FloatingBar() {
             height: '40px',
           }}
         >
+          {/* File menu button (only in Tauri) */}
+          {inTauri && (
+            <>
+              <div className="relative">
+                <button
+                  onClick={() => setShowFileMenu(!showFileMenu)}
+                  className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
+                  aria-label="File menu"
+                  title="File menu"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </button>
+
+                {/* File menu dropdown */}
+                {showFileMenu && (
+                  <div
+                    className="absolute bottom-full left-0 mb-2"
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: 'var(--shadow-lg)',
+                      minWidth: '180px',
+                      padding: 'var(--spacing-1)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { newDoc(); setShowFileMenu(false); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-tertiary)] flex items-center justify-between"
+                      style={{ fontSize: '14px', color: 'var(--text-primary)' }}
+                    >
+                      <span>New</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>Cmd+N</span>
+                    </button>
+                    <button
+                      onClick={() => { openDocument(); setShowFileMenu(false); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-tertiary)] flex items-center justify-between"
+                      style={{ fontSize: '14px', color: 'var(--text-primary)' }}
+                    >
+                      <span>Open...</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>Cmd+O</span>
+                    </button>
+                    <button
+                      onClick={() => { saveDocument(); setShowFileMenu(false); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-tertiary)] flex items-center justify-between"
+                      style={{ fontSize: '14px', color: 'var(--text-primary)' }}
+                    >
+                      <span>Save</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>Cmd+S</span>
+                    </button>
+                    <button
+                      onClick={() => { saveDocument(undefined); setShowFileMenu(false); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-tertiary)] flex items-center justify-between"
+                      style={{ fontSize: '14px', color: 'var(--text-primary)' }}
+                    >
+                      <span>Save As...</span>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>Cmd+Shift+S</span>
+                    </button>
+                    {document.path && (
+                      <div
+                        className="px-3 py-2 border-t"
+                        style={{
+                          borderColor: 'var(--border-default)',
+                          fontSize: '12px',
+                          color: 'var(--text-tertiary)',
+                          marginTop: '4px',
+                          paddingTop: '8px',
+                        }}
+                      >
+                        {document.path.split('/').pop()}
+                        {document.isModified && ' (modified)'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div
+                className="w-px h-4"
+                style={{ background: 'var(--border-default)' }}
+              />
+            </>
+          )}
+
           {/* Preview toggle button */}
           <button
             onClick={handleTogglePreview}
@@ -199,6 +331,14 @@ export default function FloatingBar() {
           </button>
         </div>
       </div>
+
+      {/* Click outside to close file menu */}
+      {showFileMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowFileMenu(false)}
+        />
+      )}
 
       {/* Settings panel */}
       {showSettings && (

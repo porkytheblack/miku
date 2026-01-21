@@ -1,0 +1,49 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Miku",
+  "version": "0.1.0",
+  "identifier": "com.miku.editor",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Miku",
+        "label": "main",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 600,
+        "minHeight": 400,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "A markdown editor that treats AI as a tool, not a collaborator",
+    "longDescription": "Miku is a markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer. Unlike conventional AI writing tools that interrupt your flow with real-time suggestions and autocomplete, Miku stays silent while you write and only surfaces feedback after you've finished a thought.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

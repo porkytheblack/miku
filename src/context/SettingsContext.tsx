@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { EditorSettings } from '@/types';
+import { isTauri, loadSettings, saveSettings, toBackendSettings, toFrontendSettings } from '@/lib/tauri';
 
 interface SettingsContextType {
   settings: EditorSettings;
@@ -27,23 +28,54 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
 
+  // Load settings on mount
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem('miku-settings');
-    if (saved) {
-      try {
-        setSettings({ ...defaultSettings, ...JSON.parse(saved) });
-      } catch {
-        // Invalid JSON, use defaults
+
+    const loadInitialSettings = async () => {
+      if (isTauri()) {
+        // Load from Tauri backend
+        try {
+          const backendSettings = await loadSettings();
+          setSettings(toFrontendSettings(backendSettings));
+        } catch {
+          // Fall back to defaults
+          setSettings(defaultSettings);
+        }
+      } else {
+        // Load from localStorage (browser mode)
+        const saved = localStorage.getItem('miku-settings');
+        if (saved) {
+          try {
+            setSettings({ ...defaultSettings, ...JSON.parse(saved) });
+          } catch {
+            // Invalid JSON, use defaults
+          }
+        }
       }
-    }
+    };
+
+    loadInitialSettings();
   }, []);
 
-  useEffect(() => {
+  // Save settings when they change
+  const persistSettings = useCallback(async (newSettings: EditorSettings) => {
     if (!mounted) return;
-    localStorage.setItem('miku-settings', JSON.stringify(settings));
-  }, [settings, mounted]);
 
+    if (isTauri()) {
+      // Save to Tauri backend
+      try {
+        await saveSettings(toBackendSettings(newSettings));
+      } catch (error) {
+        console.error('Failed to save settings to Tauri:', error);
+      }
+    } else {
+      // Save to localStorage (browser mode)
+      localStorage.setItem('miku-settings', JSON.stringify(newSettings));
+    }
+  }, [mounted]);
+
+  // Update theme when settings change
   useEffect(() => {
     const updateTheme = () => {
       let theme: 'light' | 'dark' = 'light';
@@ -71,9 +103,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return () => mediaQuery.removeEventListener('change', updateTheme);
   }, [settings.theme]);
 
-  const updateSettings = (newSettings: Partial<EditorSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
-  };
+  const updateSettings = useCallback((newSettings: Partial<EditorSettings>) => {
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings };
+      persistSettings(updated);
+      return updated;
+    });
+  }, [persistSettings]);
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, resolvedTheme }}>

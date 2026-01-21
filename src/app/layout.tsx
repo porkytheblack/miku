@@ -3,6 +3,7 @@ import { JetBrains_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { MikuProvider } from "@/context/MikuContext";
+import { DocumentProvider } from "@/context/DocumentContext";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -28,9 +29,11 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${jetbrainsMono.variable} ${inter.variable} antialiased`}>
         <SettingsProvider>
-          <MikuProvider>
-            {children}
-          </MikuProvider>
+          <DocumentProvider>
+            <MikuProvider>
+              {children}
+            </MikuProvider>
+          </DocumentProvider>
         </SettingsProvider>
       </body>
     </html>
