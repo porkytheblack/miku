@@ -2,19 +2,9 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import BlockEditor from "@/components/BlockEditor";
 import FloatingBar from "@/components/FloatingBar";
-import { useAuth, isClerkConfigured } from '@/components/AuthProvider';
-
-// Dynamically import Clerk components
-const UserButton = isClerkConfigured
-  ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.UserButton), { ssr: false })
-  : null;
-
-const SignOutButton = isClerkConfigured
-  ? dynamic(() => import('@clerk/nextjs').then((mod) => mod.SignOutButton), { ssr: false })
-  : null;
+import { useAuth } from '@/components/AuthProvider';
 
 export default function EditorPage() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -65,38 +55,6 @@ export default function EditorPage() {
 
   return (
     <main className="relative min-h-screen">
-      {/* User menu in top right */}
-      {isClerkConfigured && UserButton && (
-        <div
-          className="fixed top-4 right-4 z-50 flex items-center gap-3 px-3 py-2 rounded-full"
-          style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-default)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-          }}
-        >
-          <UserButton
-            appearance={{
-              elements: {
-                avatarBox: 'w-8 h-8',
-              },
-            }}
-          />
-          {SignOutButton && (
-            <SignOutButton redirectUrl="/">
-              <button
-                className="px-3 py-1 rounded-full text-xs font-medium transition-all hover:scale-105"
-                style={{
-                  background: 'transparent',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                Sign Out
-              </button>
-            </SignOutButton>
-          )}
-        </div>
-      )}
       <BlockEditor />
       <FloatingBar />
     </main>
