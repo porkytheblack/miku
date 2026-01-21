@@ -227,6 +227,36 @@ export class MikuAgent {
 
     return result;
   }
+
+  /**
+   * Rewrite a piece of text while preserving the writer's intent
+   */
+  async rewrite(text: string, context?: string): Promise<string> {
+    const systemPrompt = `You are Miku, a gentle and thoughtful writing assistant. Your task is to rewrite the given text to improve clarity, flow, and style while preserving the writer's voice and intent.
+
+Guidelines:
+- Keep the same meaning and tone
+- Improve clarity and readability
+- Fix any grammar or spelling issues
+- Make the text more concise if possible
+- Preserve any technical terms or specific vocabulary
+- Return ONLY the rewritten text, nothing else - no explanations, no quotes, no prefixes`;
+
+    let userMessage = `Please rewrite the following text:\n\n${text}`;
+    if (context) {
+      userMessage += `\n\nContext: This text appears in a document about: ${context}`;
+    }
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    const response = await this.provider.chat(messages);
+
+    // Return the rewritten text, trimmed
+    return (response.content || text).trim();
+  }
 }
 
 // Factory function for creating the agent

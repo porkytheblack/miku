@@ -59,7 +59,8 @@ interface HistoryEntry {
 
 export default function BlockEditor() {
   const { settings } = useSettings();
-  const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
+  const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
+  const [isRewriting, setIsRewriting] = useState(false);
   const [content, setContent] = useState<string>('');
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -302,11 +303,79 @@ export default function BlockEditor() {
     }
   }, [slashStartIndex]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle Cmd+Enter for manual review
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       triggerManualReview();
+      return;
+    }
+
+    // Handle Cmd+R for rewriting selected text
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const selectionStart = textarea.selectionStart;
+      const selectionEnd = textarea.selectionEnd;
+
+      // Only rewrite if there's a selection
+      if (selectionStart === selectionEnd) {
+        return;
+      }
+
+      const selectedText = content.slice(selectionStart, selectionEnd);
+      if (!selectedText.trim()) return;
+
+      setIsRewriting(true);
+      try {
+        const rewrittenText = await requestRewrite(selectedText);
+
+        // Replace the selected text with the rewritten version
+        const newContent =
+          content.slice(0, selectionStart) +
+          rewrittenText +
+          content.slice(selectionEnd);
+
+        setContent(newContent);
+
+        // Adjust suggestion positions if any
+        if (state.suggestions.length > 0) {
+          const delta = rewrittenText.length - selectedText.length;
+          const adjustedSuggestions = state.suggestions.map(s => {
+            if (s.startIndex >= selectionEnd) {
+              return {
+                ...s,
+                startIndex: s.startIndex + delta,
+                endIndex: s.endIndex + delta,
+              };
+            }
+            // If suggestion overlaps with the selection, remove it
+            if (s.endIndex > selectionStart && s.startIndex < selectionEnd) {
+              return null;
+            }
+            return s;
+          }).filter((s): s is NonNullable<typeof s> => s !== null);
+
+          updateSuggestions(adjustedSuggestions);
+        }
+
+        // Update the ref to prevent position drift detection
+        reviewedContentRef.current = newContent;
+
+        // Set cursor after the rewritten text
+        setTimeout(() => {
+          const newCursorPos = selectionStart + rewrittenText.length;
+          textarea.selectionStart = newCursorPos;
+          textarea.selectionEnd = newCursorPos;
+          textarea.focus();
+        }, 0);
+      } catch (error) {
+        console.error('Rewrite error:', error);
+      } finally {
+        setIsRewriting(false);
+      }
       return;
     }
 
@@ -368,7 +437,7 @@ export default function BlockEditor() {
         }
       }
     }
-  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview]);
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview, requestRewrite, state.suggestions, updateSuggestions]);
 
   const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
     if (slashStartIndex === null || !textareaRef.current) return;
@@ -503,13 +572,35 @@ export default function BlockEditor() {
       lastRevision.originalText +
       content.slice(foundIndex + lastRevision.revisedText.length);
 
+    // Calculate delta for adjusting suggestion positions
+    const delta = lastRevision.originalText.length - lastRevision.revisedText.length;
+    const changeEndIndex = foundIndex + lastRevision.revisedText.length;
+
+    // Adjust suggestion positions
+    if (state.suggestions.length > 0) {
+      const adjustedSuggestions = state.suggestions.map(s => {
+        if (s.startIndex >= changeEndIndex) {
+          return {
+            ...s,
+            startIndex: s.startIndex + delta,
+            endIndex: s.endIndex + delta,
+          };
+        }
+        return s;
+      });
+      updateSuggestions(adjustedSuggestions);
+    }
+
+    // Update the reviewed content ref
+    reviewedContentRef.current = newContent;
+
     // Push to redo stack before changing state
     setRedoStack(prev => [...prev, { content, revision: lastRevision }]);
 
     setContent(newContent);
     setAcceptedRevisions(prev => prev.slice(0, -1));
     setLastReviewedContent('');
-  }, [content, acceptedRevisions]);
+  }, [content, acceptedRevisions, state.suggestions, updateSuggestions]);
 
   // Redo the last undone action
   const handleRedo = useCallback(() => {
@@ -612,13 +703,15 @@ export default function BlockEditor() {
       className="editor-wrapper w-full min-h-screen"
       style={{
         background: 'var(--bg-primary)',
+        display: 'flex',
+        justifyContent: 'center',
       }}
     >
       <div
         className="editor-container relative"
         style={{
           width: '100%',
-          maxWidth: '100%',
+          maxWidth: '80%',
           padding: 'var(--spacing-8) var(--spacing-6)',
           minHeight: '100vh',
         }}
@@ -774,7 +867,13 @@ Tips:
         )}
 
         {/* Status indicator */}
-        {state.status === 'thinking' && (
+        {isRewriting && (
+          <div className="status-indicator">
+            Miku is rewriting...
+          </div>
+        )}
+
+        {state.status === 'thinking' && !isRewriting && (
           <div className="status-indicator">
             Miku is reviewing...
           </div>
@@ -860,6 +959,13 @@ Tips:
 
         .editor-wrapper::-webkit-scrollbar-thumb:hover {
           background: var(--text-tertiary);
+        }
+
+        /* Mobile: full width */
+        @media (max-width: 768px) {
+          .editor-container {
+            max-width: 100% !important;
+          }
         }
       `}</style>
     </div>

@@ -27,6 +27,7 @@ interface ReviewOptions {
 interface MikuContextType {
   state: MikuState;
   requestReview: (text: string, options?: ReviewOptions) => void;
+  requestRewrite: (text: string) => Promise<string>;
   setActiveSuggestion: (id: string | null) => void;
   acceptSuggestion: (id: string) => string | null;
   dismissSuggestion: (id: string) => void;
@@ -321,11 +322,31 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const requestRewrite = useCallback(async (text: string): Promise<string> => {
+    if (!text.trim()) {
+      return text;
+    }
+
+    // If we have an AI agent configured, use it
+    if (agentRef.current) {
+      try {
+        return await agentRef.current.rewrite(text);
+      } catch (error) {
+        console.error('AI rewrite error:', error);
+        throw error;
+      }
+    } else {
+      // No AI configured, return original text
+      throw new Error('No AI provider configured. Please add your API key in settings.');
+    }
+  }, []);
+
   return (
     <MikuContext.Provider
       value={{
         state,
         requestReview,
+        requestRewrite,
         setActiveSuggestion,
         acceptSuggestion,
         dismissSuggestion,
