@@ -144,6 +144,16 @@
   box-sizing: border-box;
 }
 
+/* Reset textarea to match div rendering exactly */
+textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+}
+
 html {
   height: 100%;
 }

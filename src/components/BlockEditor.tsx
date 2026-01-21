@@ -506,28 +506,12 @@ export default function BlockEditor() {
     fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
   };
 
-  // Common text styles that must be identical for highlight alignment
-  const textStyles: React.CSSProperties = {
-    ...editorStyles,
-    margin: 0,
-    padding: 0,
-    border: 'none',
-    whiteSpace: 'pre-wrap',
-    wordWrap: 'break-word',
-    overflowWrap: 'break-word',
-    lineHeight: settings.lineHeight,
-    letterSpacing: 'normal',
-    wordSpacing: 'normal',
-    textRendering: 'auto',
-  };
-
   return (
     <div
       className="editor-wrapper w-full"
       style={{
         background: 'var(--bg-primary)',
         minHeight: '100vh',
-        paddingBottom: '100px', // Space for floating bar
       }}
     >
       <div
@@ -536,7 +520,9 @@ export default function BlockEditor() {
           width: '100%',
           maxWidth: '100%',
           padding: '32px 24px',
-          minHeight: 'calc(100vh - 100px)',
+          paddingBottom: '80px', // Space for floating bar to hover over
+          minHeight: '100vh',
+          boxSizing: 'border-box',
         }}
       >
         {isPreviewMode ? (
@@ -557,35 +543,42 @@ export default function BlockEditor() {
             />
           </div>
         ) : (
-          /* Editor with highlight overlay */
+          /* Editor with highlight overlay - using precise positioning */
           <div
             className="editor-highlight-container"
             style={{
               position: 'relative',
               width: '100%',
-              minHeight: 'calc(100vh - 200px)',
             }}
           >
-            {/* Highlight backdrop layer - positioned identically to textarea */}
+            {/* Highlight backdrop layer */}
             <div
               ref={highlightRef}
               className="highlight-backdrop"
               onClick={handleHighlightClick}
               aria-hidden="true"
               style={{
-                ...textStyles,
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                right: 0,
-                bottom: 0,
+                width: '100%',
+                height: '100%',
                 color: 'transparent',
                 overflow: 'hidden',
                 pointerEvents: 'none',
                 zIndex: 1,
-                // Ensure highlight marks are clickable
-                WebkitUserSelect: 'none',
-                userSelect: 'none',
+                // Text must match textarea exactly
+                fontSize: `${settings.fontSize}px`,
+                lineHeight: settings.lineHeight,
+                fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word',
+                // Reset everything
+                margin: 0,
+                padding: 0,
+                border: 'none',
+                boxSizing: 'border-box',
               }}
               dangerouslySetInnerHTML={{ __html: highlightedHTML }}
             />
@@ -597,18 +590,30 @@ export default function BlockEditor() {
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               onScroll={syncScroll}
-              className="editor-textarea w-full resize-none border-none outline-none"
+              className="editor-textarea"
               style={{
-                ...textStyles,
                 position: 'relative',
                 width: '100%',
-                minHeight: 'calc(100vh - 200px)',
+                minHeight: 'calc(100vh - 150px)',
                 background: 'transparent',
                 color: 'var(--text-primary)',
                 caretColor: 'var(--accent-primary)',
                 zIndex: 2,
+                // Text styling
+                fontSize: `${settings.fontSize}px`,
+                lineHeight: settings.lineHeight,
+                fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word',
+                // Reset browser defaults
+                margin: 0,
+                padding: 0,
+                border: 'none',
                 outline: 'none',
                 resize: 'none',
+                boxSizing: 'border-box',
+                display: 'block',
               }}
               placeholder={settings.reviewMode === 'manual'
                 ? `Start writing...
@@ -732,11 +737,18 @@ Tips:
       <style jsx>{`
         .editor-textarea {
           field-sizing: content;
-          /* Reset all potentially different defaults */
+          /* Reset ALL browser defaults for textarea */
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
           -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
+          /* Ensure no internal padding from browser */
+          padding: 0 !important;
+          margin: 0 !important;
+          border: none !important;
         }
 
         .editor-textarea::placeholder {
@@ -750,6 +762,7 @@ Tips:
 
         .highlight-backdrop {
           user-select: none;
+          pointer-events: none;
           /* Match textarea text rendering exactly */
           -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
@@ -760,6 +773,7 @@ Tips:
         /* Ensure marks inside highlight layer can receive clicks */
         .highlight-backdrop :global(mark) {
           pointer-events: auto;
+          cursor: pointer;
         }
 
         .status-indicator {
