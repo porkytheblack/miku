@@ -886,15 +886,17 @@ function SuggestionPanel({
       ref={panelRef}
       style={{
         position: 'fixed',
-        bottom: '100px',
+        bottom: '80px',
         left: '50%',
         transform: 'translateX(-50%)',
-        maxWidth: '400px',
+        maxWidth: '600px',
         width: 'calc(100vw - 32px)',
+        maxHeight: 'calc(100vh - 160px)',
+        overflowY: 'auto',
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border-default)',
         borderRadius: 'var(--radius-md)',
-        padding: 'var(--spacing-4)',
+        padding: '16px',
         boxShadow: 'var(--shadow-lg)',
         zIndex: 200,
       }}
@@ -907,6 +909,7 @@ function SuggestionPanel({
             height: '8px',
             borderRadius: '50%',
             background: typeColors[suggestion.type],
+            flexShrink: 0,
           }}
         />
         <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '14px' }}>
@@ -922,6 +925,7 @@ function SuggestionPanel({
             cursor: 'pointer',
             color: 'var(--text-secondary)',
             borderRadius: 'var(--radius-sm)',
+            flexShrink: 0,
           }}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
@@ -931,23 +935,23 @@ function SuggestionPanel({
       </div>
 
       {/* Observation */}
-      <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5', marginBottom: '12px' }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5', marginBottom: '12px', wordWrap: 'break-word' }}>
         {suggestion.observation}
       </p>
 
       {/* Original text */}
-      <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
+      <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px', overflowX: 'auto' }}>
         <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginBottom: '4px' }}>Original:</p>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', color: 'var(--text-primary)' }}>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: '1.5' }}>
           {suggestion.originalText}
         </p>
       </div>
 
       {/* Suggested revision */}
       {suggestion.suggestedRevision !== suggestion.originalText && (
-        <div style={{ background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px' }}>
+        <div style={{ background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', marginBottom: '12px', overflowX: 'auto' }}>
           <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', marginBottom: '4px' }}>Suggested:</p>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', color: 'var(--text-primary)' }}>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: '1.5' }}>
             {suggestion.suggestedRevision}
           </p>
         </div>
