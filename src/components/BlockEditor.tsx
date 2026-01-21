@@ -453,6 +453,10 @@ export default function BlockEditor() {
         return s;
       });
 
+    // Update reviewedContentRef BEFORE setContent to prevent the useEffect
+    // from re-adjusting positions (we've already done that manually)
+    reviewedContentRef.current = newContent;
+
     // Update suggestions in context (don't remove all, just update positions)
     updateSuggestions(remainingSuggestions);
 
@@ -500,16 +504,20 @@ export default function BlockEditor() {
       return s;
     });
 
-    // Update suggestions in context with adjusted positions
-    if (state.suggestions.length > 0) {
-      updateSuggestions(adjustedSuggestions);
-    }
-
     // Replace the revised text with the original
     const newContent =
       content.slice(0, foundIndex) +
       lastRevision.originalText +
       content.slice(foundIndex + lastRevision.revisedText.length);
+
+    // Update reviewedContentRef BEFORE setContent to prevent the useEffect
+    // from re-adjusting positions (we've already done that manually)
+    reviewedContentRef.current = newContent;
+
+    // Update suggestions in context with adjusted positions
+    if (state.suggestions.length > 0) {
+      updateSuggestions(adjustedSuggestions);
+    }
 
     setContent(newContent);
     setAcceptedRevisions(prev => prev.slice(0, -1));
