@@ -20,18 +20,34 @@ export default function TopBar() {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        height: '36px',
         background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border-default)',
-        paddingLeft: '8px',
-        paddingRight: '8px',
-        gap: '2px',
-        overflowX: 'auto',
         flexShrink: 0,
       }}
     >
+      {/* Title bar drag region (for macOS traffic lights) */}
+      <div
+        data-tauri-drag-region
+        style={{
+          height: '28px',
+          background: 'var(--bg-secondary)',
+          // Allow dragging the window from this area
+          WebkitAppRegion: 'drag',
+        } as React.CSSProperties}
+      />
+
+      {/* Tabs area */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          height: '36px',
+          borderBottom: '1px solid var(--border-default)',
+          paddingLeft: '8px',
+          paddingRight: '8px',
+          gap: '2px',
+          overflowX: 'auto',
+        }}
+      >
       {/* Document tabs */}
       {openDocuments.map((doc) => (
         <div
@@ -132,6 +148,7 @@ export default function TopBar() {
           <path d="M7 1v12M1 7h12" />
         </svg>
       </button>
+      </div>
     </div>
   );
 }
