@@ -2,7 +2,6 @@ import Image from "next/image";
 
 const GITHUB_REPO = "https://github.com/porkytheblack/miku";
 const GITHUB_RELEASES = "https://github.com/porkytheblack/miku/releases/latest";
-const DMG_DOWNLOAD = "https://github.com/porkytheblack/miku/releases/latest/download/Miku.dmg";
 
 // Icons as SVG components
 function SparklesIcon() {
@@ -106,6 +105,22 @@ function AppleIcon() {
   );
 }
 
+function WindowsIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+    </svg>
+  );
+}
+
+function LinuxIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587.26 1.24.43 1.922.43.682 0 1.335-.17 1.922-.43.238.482.683.83 1.208.946.75.2 1.69-.004 2.616-.47.865-.465 1.964-.4 2.774-.6.405-.13.766-.267.94-.6.174-.34.142-.804-.106-1.484-.076-.242-.018-.571.04-.97.027-.136.055-.337.055-.536.003-.208-.042-.413-.132-.602-.206-.411-.551-.544-.864-.68-.312-.133-.598-.2-.797-.4a4.07 4.07 0 01-.663-.839.424.424 0 00-.11-.135c.123-.805-.009-1.657-.287-2.489-.589-1.77-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021z" />
+    </svg>
+  );
+}
+
 export default function Home() {
   return (
     <main className="min-h-screen">
@@ -134,7 +149,7 @@ export default function Home() {
               <span>Star</span>
             </a>
             <a
-              href={DMG_DOWNLOAD}
+              href={GITHUB_RELEASES}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary text-bg-primary font-medium hover:opacity-90 transition-opacity text-sm"
             >
               <DownloadIcon />
@@ -201,16 +216,16 @@ export default function Home() {
           </div>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col items-center gap-4">
             <a
-              href={DMG_DOWNLOAD}
+              href={GITHUB_RELEASES}
               className="flex items-center gap-3 px-8 py-4 rounded-xl bg-accent-primary text-bg-primary font-semibold text-lg hover:opacity-90 transition-opacity"
             >
-              <AppleIcon />
-              Download for macOS
+              <DownloadIcon />
+              Download Miku
             </a>
             <p className="text-text-tertiary text-sm">
-              Free and open source
+              Available for macOS, Windows, and Linux
             </p>
           </div>
         </div>
@@ -264,32 +279,54 @@ export default function Home() {
 
       {/* Download Section */}
       <section className="py-24 px-6">
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-semibold mb-4">
             Start Writing
           </h2>
-          <p className="text-text-secondary text-lg mb-8">
-            Download Miku for macOS. Windows and Linux coming soon.
+          <p className="text-text-secondary text-lg mb-10">
+            Download Miku for your platform. Free and open source.
           </p>
 
-          <div className="flex flex-col items-center gap-6">
-            <a
-              href={DMG_DOWNLOAD}
-              className="flex items-center gap-3 px-8 py-4 rounded-xl bg-accent-primary text-bg-primary font-semibold text-lg hover:opacity-90 transition-opacity"
-            >
-              <AppleIcon />
-              Download .dmg
-            </a>
-
+          <div className="grid sm:grid-cols-3 gap-4 mb-8">
+            {/* macOS */}
             <a
               href={GITHUB_RELEASES}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors text-sm underline underline-offset-4"
+              className="flex flex-col items-center gap-3 p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-border-focus transition-colors"
             >
-              View all releases on GitHub
+              <AppleIcon />
+              <span className="font-medium text-text-primary">macOS</span>
+              <span className="text-text-tertiary text-sm">Intel & Apple Silicon</span>
+            </a>
+
+            {/* Windows */}
+            <a
+              href={GITHUB_RELEASES}
+              className="flex flex-col items-center gap-3 p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-border-focus transition-colors"
+            >
+              <WindowsIcon />
+              <span className="font-medium text-text-primary">Windows</span>
+              <span className="text-text-tertiary text-sm">.msi installer</span>
+            </a>
+
+            {/* Linux */}
+            <a
+              href={GITHUB_RELEASES}
+              className="flex flex-col items-center gap-3 p-6 rounded-xl bg-bg-secondary border border-border-default hover:border-border-focus transition-colors"
+            >
+              <LinuxIcon />
+              <span className="font-medium text-text-primary">Linux</span>
+              <span className="text-text-tertiary text-sm">AppImage & .deb</span>
             </a>
           </div>
+
+          <a
+            href={GITHUB_RELEASES}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-text-secondary hover:text-text-primary transition-colors text-sm underline underline-offset-4"
+          >
+            View all releases on GitHub
+          </a>
         </div>
       </section>
 

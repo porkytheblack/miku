@@ -106,9 +106,9 @@ Miku is a markdown editor that treats AI as a tool, not a collaborator. It gives
 
 Download Miku from the [GitHub releases page](https://github.com/porkytheblack/miku/releases/latest).
 
-- **macOS**: Download `Miku.dmg`
-- **Windows**: Coming soon
-- **Linux**: Coming soon
+- **macOS**: `.dmg` for Intel and Apple Silicon
+- **Windows**: `.msi` installer
+- **Linux**: AppImage and `.deb` packages
 
 ---
 
