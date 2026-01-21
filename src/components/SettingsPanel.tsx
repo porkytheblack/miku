@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
+import AccountSection from './AccountSection';
 import { Theme, AIProvider, AI_MODELS, ReviewMode, AggressivenessLevel } from '@/types';
 
 interface SettingsPanelProps {
@@ -155,6 +156,9 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
         {/* Content */}
         <div className="p-4 space-y-6">
+          {/* Account section - shows user info and sign out */}
+          <AccountSection />
+
           {/* AI Configuration section */}
           <section>
             <h3

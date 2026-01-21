@@ -43,7 +43,7 @@ const SLASH_COMMANDS = [
   { id: 'divider', label: 'Divider', icon: '—', prefix: '---\n' },
 ];
 
-// Track accepted revisions for undo and to exclude from future reviews
+// Track accepted revisions for undo/redo and to exclude from future reviews
 interface AcceptedRevision {
   id: string;
   originalText: string;
@@ -51,9 +51,16 @@ interface AcceptedRevision {
   position: number; // Position in document when accepted
 }
 
+// History entry for undo/redo stack
+interface HistoryEntry {
+  content: string;
+  revision?: AcceptedRevision;
+}
+
 export default function BlockEditor() {
   const { settings } = useSettings();
-  const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
+  const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
+  const [isRewriting, setIsRewriting] = useState(false);
   const [content, setContent] = useState<string>('');
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -68,13 +75,24 @@ export default function BlockEditor() {
   // Track accepted revisions for undo functionality
   const [acceptedRevisions, setAcceptedRevisions] = useState<AcceptedRevision[]>([]);
 
-  // Expose preview mode and undo to parent (FloatingBar)
-  const [canUndo, setCanUndo] = useState(false);
+  // Redo stack for redo functionality
+  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
 
-  // Update canUndo when acceptedRevisions changes
+  // Current note ID for saving
+  const [noteId, setNoteId] = useState<string | null>(null);
+
+  // Expose preview mode, undo, and redo to parent (FloatingBar)
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Update canUndo and canRedo when stacks change
   useEffect(() => {
     setCanUndo(acceptedRevisions.length > 0);
   }, [acceptedRevisions]);
+
+  useEffect(() => {
+    setCanRedo(redoStack.length > 0);
+  }, [redoStack]);
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -154,12 +172,15 @@ export default function BlockEditor() {
     };
   }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext, getContentForReview]);
 
-  // Adjust suggestion positions when content changes after a review
-  // Only run when content changes, not when suggestions change
+  // Adjust suggestion positions when content changes due to user typing (not accepting suggestions)
+  // This effect handles position drift when the user edits text while suggestions are visible
+  // Note: When accepting suggestions, handleAccept manages position updates directly
   useEffect(() => {
     const reviewedContent = reviewedContentRef.current;
 
-    // Skip if no reviewed content or content hasn't changed
+    // Skip if content matches the ref - this means either:
+    // 1. No review has happened yet
+    // 2. We just updated the ref (e.g., after accepting a suggestion)
     if (!reviewedContent || reviewedContent === content) {
       return;
     }
@@ -282,11 +303,90 @@ export default function BlockEditor() {
     }
   }, [slashStartIndex]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle Cmd+Enter for manual review
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       triggerManualReview();
+      return;
+    }
+
+    // Handle Cmd+R for rewriting selected text
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const selectionStart = textarea.selectionStart;
+      const selectionEnd = textarea.selectionEnd;
+
+      // Only rewrite if there's a selection
+      if (selectionStart === selectionEnd) {
+        return;
+      }
+
+      const selectedText = content.slice(selectionStart, selectionEnd);
+      if (!selectedText.trim()) return;
+
+      setIsRewriting(true);
+      try {
+        const rewrittenText = await requestRewrite(selectedText);
+
+        // Replace the selected text with the rewritten version
+        const newContent =
+          content.slice(0, selectionStart) +
+          rewrittenText +
+          content.slice(selectionEnd);
+
+        // Track this rewrite for undo (same structure as accepted suggestions)
+        setAcceptedRevisions(prev => [...prev, {
+          id: `rewrite-${Date.now()}`,
+          originalText: selectedText,
+          revisedText: rewrittenText,
+          position: selectionStart,
+        }]);
+
+        // Clear redo stack since we made a new change
+        setRedoStack([]);
+
+        setContent(newContent);
+
+        // Adjust suggestion positions if any
+        if (state.suggestions.length > 0) {
+          const delta = rewrittenText.length - selectedText.length;
+          const adjustedSuggestions = state.suggestions.map(s => {
+            if (s.startIndex >= selectionEnd) {
+              return {
+                ...s,
+                startIndex: s.startIndex + delta,
+                endIndex: s.endIndex + delta,
+              };
+            }
+            // If suggestion overlaps with the selection, remove it
+            if (s.endIndex > selectionStart && s.startIndex < selectionEnd) {
+              return null;
+            }
+            return s;
+          }).filter((s): s is NonNullable<typeof s> => s !== null);
+
+          updateSuggestions(adjustedSuggestions);
+        }
+
+        // Update the ref to prevent position drift detection
+        reviewedContentRef.current = newContent;
+
+        // Set cursor after the rewritten text
+        setTimeout(() => {
+          const newCursorPos = selectionStart + rewrittenText.length;
+          textarea.selectionStart = newCursorPos;
+          textarea.selectionEnd = newCursorPos;
+          textarea.focus();
+        }, 0);
+      } catch (error) {
+        console.error('Rewrite error:', error);
+      } finally {
+        setIsRewriting(false);
+      }
       return;
     }
 
@@ -348,7 +448,7 @@ export default function BlockEditor() {
         }
       }
     }
-  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview]);
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview, requestRewrite, state.suggestions, updateSuggestions]);
 
   const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
     if (slashStartIndex === null || !textareaRef.current) return;
@@ -426,10 +526,42 @@ export default function BlockEditor() {
       position: startIndex,
     }]);
 
+    // Calculate the character delta (how much the text length changed)
+    const delta = suggestion.suggestedRevision.length - suggestion.originalText.length;
+
+    // Adjust remaining suggestions' positions with simple delta shift
+    // Suggestions BEFORE the accepted one stay the same
+    // Suggestions AFTER need their indices shifted by delta
+    const remainingSuggestions = state.suggestions
+      .filter(s => s.id !== id)
+      .map(s => {
+        // If this suggestion starts after the accepted one ends, shift its indices
+        if (s.startIndex >= endIndex) {
+          return {
+            ...s,
+            startIndex: s.startIndex + delta,
+            endIndex: s.endIndex + delta,
+          };
+        }
+        // Suggestions before the accepted one stay unchanged
+        return s;
+      });
+
+    // Update the reviewed content ref to the new content
+    reviewedContentRef.current = newContent;
+
+    // Update content first
     setContent(newContent);
     setLastReviewedContent('');
-    acceptSuggestion(id);
-  }, [content, state.suggestions, acceptSuggestion]);
+
+    // Update suggestions with adjusted positions (or clear if none left)
+    if (remainingSuggestions.length > 0) {
+      updateSuggestions(remainingSuggestions);
+    } else {
+      clearSuggestions();
+    }
+    setActiveSuggestion(null);
+  }, [content, state.suggestions, updateSuggestions, clearSuggestions, setActiveSuggestion]);
 
   // Undo the last accepted suggestion
   const handleUndo = useCallback(() => {
@@ -451,10 +583,67 @@ export default function BlockEditor() {
       lastRevision.originalText +
       content.slice(foundIndex + lastRevision.revisedText.length);
 
+    // Calculate delta for adjusting suggestion positions
+    const delta = lastRevision.originalText.length - lastRevision.revisedText.length;
+    const changeEndIndex = foundIndex + lastRevision.revisedText.length;
+
+    // Adjust suggestion positions
+    if (state.suggestions.length > 0) {
+      const adjustedSuggestions = state.suggestions.map(s => {
+        if (s.startIndex >= changeEndIndex) {
+          return {
+            ...s,
+            startIndex: s.startIndex + delta,
+            endIndex: s.endIndex + delta,
+          };
+        }
+        return s;
+      });
+      updateSuggestions(adjustedSuggestions);
+    }
+
+    // Update the reviewed content ref
+    reviewedContentRef.current = newContent;
+
+    // Push to redo stack before changing state
+    setRedoStack(prev => [...prev, { content, revision: lastRevision }]);
+
     setContent(newContent);
     setAcceptedRevisions(prev => prev.slice(0, -1));
     setLastReviewedContent('');
-  }, [content, acceptedRevisions]);
+  }, [content, acceptedRevisions, state.suggestions, updateSuggestions]);
+
+  // Redo the last undone action
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+
+    const lastEntry = redoStack[redoStack.length - 1];
+    if (!lastEntry.revision) {
+      setRedoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Find the original text in the current content
+    const foundIndex = content.indexOf(lastEntry.revision.originalText);
+    if (foundIndex === -1) {
+      // Can't find the original text - just remove from redo stack
+      setRedoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Replace the original text with the revision
+    const newContent =
+      content.slice(0, foundIndex) +
+      lastEntry.revision.revisedText +
+      content.slice(foundIndex + lastEntry.revision.originalText.length);
+
+    // Add back to accepted revisions
+    setAcceptedRevisions(prev => [...prev, lastEntry.revision!]);
+
+    setContent(newContent);
+    setRedoStack(prev => prev.slice(0, -1));
+    setLastReviewedContent('');
+  }, [content, redoStack]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
@@ -463,23 +652,54 @@ export default function BlockEditor() {
   // Listen for events from FloatingBar
   useEffect(() => {
     const handleUndoEvent = () => handleUndo();
+    const handleRedoEvent = () => handleRedo();
     const handlePreviewToggle = () => setIsPreviewMode(prev => !prev);
 
+    const handleLoadNote = (e: CustomEvent<{ content: string; title: string; noteId: string }>) => {
+      setContent(e.detail.content);
+      setNoteId(e.detail.noteId);
+      setAcceptedRevisions([]);
+      setRedoStack([]);
+      clearSuggestions();
+      setLastReviewedContent('');
+    };
+
+    const handleNewNote = () => {
+      setContent('');
+      setNoteId(null);
+      setAcceptedRevisions([]);
+      setRedoStack([]);
+      clearSuggestions();
+      setLastReviewedContent('');
+    };
+
+    const handleNoteCreated = (e: CustomEvent<{ noteId: string }>) => {
+      setNoteId(e.detail.noteId);
+    };
+
     window.addEventListener('miku:undo', handleUndoEvent);
+    window.addEventListener('miku:redo', handleRedoEvent);
     window.addEventListener('miku:togglePreview', handlePreviewToggle);
+    window.addEventListener('miku:loadNote', handleLoadNote as EventListener);
+    window.addEventListener('miku:newNote', handleNewNote);
+    window.addEventListener('miku:noteCreated', handleNoteCreated as EventListener);
 
     return () => {
       window.removeEventListener('miku:undo', handleUndoEvent);
+      window.removeEventListener('miku:redo', handleRedoEvent);
       window.removeEventListener('miku:togglePreview', handlePreviewToggle);
+      window.removeEventListener('miku:loadNote', handleLoadNote as EventListener);
+      window.removeEventListener('miku:newNote', handleNewNote);
+      window.removeEventListener('miku:noteCreated', handleNoteCreated as EventListener);
     };
-  }, [handleUndo]);
+  }, [handleUndo, handleRedo, clearSuggestions]);
 
   // Emit state changes so FloatingBar can update
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('miku:editorState', {
-      detail: { canUndo, isPreviewMode }
+      detail: { canUndo, canRedo, isPreviewMode, noteId }
     }));
-  }, [canUndo, isPreviewMode]);
+  }, [canUndo, canRedo, isPreviewMode, noteId]);
 
   const activeSuggestion = state.suggestions.find(s => s.id === state.activeSuggestionId);
 
@@ -494,13 +714,15 @@ export default function BlockEditor() {
       className="editor-wrapper w-full min-h-screen"
       style={{
         background: 'var(--bg-primary)',
+        display: 'flex',
+        justifyContent: 'center',
       }}
     >
       <div
         className="editor-container relative"
         style={{
           width: '100%',
-          maxWidth: '100%',
+          maxWidth: '80%',
           padding: 'var(--spacing-8) var(--spacing-6)',
           minHeight: '100vh',
         }}
@@ -656,7 +878,13 @@ Tips:
         )}
 
         {/* Status indicator */}
-        {state.status === 'thinking' && (
+        {isRewriting && (
+          <div className="status-indicator">
+            Miku is rewriting...
+          </div>
+        )}
+
+        {state.status === 'thinking' && !isRewriting && (
           <div className="status-indicator">
             Miku is reviewing...
           </div>
@@ -742,6 +970,13 @@ Tips:
 
         .editor-wrapper::-webkit-scrollbar-thumb:hover {
           background: var(--text-tertiary);
+        }
+
+        /* Mobile: full width */
+        @media (max-width: 768px) {
+          .editor-container {
+            max-width: 100% !important;
+          }
         }
       `}</style>
     </div>

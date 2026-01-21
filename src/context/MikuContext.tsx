@@ -1,9 +1,10 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
-import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG, AggressivenessLevel, Suggestion } from '@/types';
+import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG, AggressivenessLevel, Suggestion, AIProvider } from '@/types';
 import { createMikuAgent, MikuAgent } from '@/lib/ai/agent';
 import { analyzeSuggestions } from '@/lib/analyzer';
+import { useAuth } from '@/components/AuthProvider';
 
 // Simple hash function for content comparison
 function hashContent(text: string): string {
@@ -26,6 +27,7 @@ interface ReviewOptions {
 interface MikuContextType {
   state: MikuState;
   requestReview: (text: string, options?: ReviewOptions) => void;
+  requestRewrite: (text: string) => Promise<string>;
   setActiveSuggestion: (id: string | null) => void;
   acceptSuggestion: (id: string) => string | null;
   dismissSuggestion: (id: string) => void;
@@ -48,12 +50,80 @@ const initialState: MikuState = {
 const MikuContext = createContext<MikuContextType | undefined>(undefined);
 
 export function MikuProvider({ children }: { children: ReactNode }) {
+  const { isSignedIn } = useAuth();
   const [state, setState] = useState<MikuState>(initialState);
   const [aiConfig, setAIConfigState] = useState<AIProviderConfig | null>(null);
   const [isUsingDefaults, setIsUsingDefaults] = useState(false);
   const [reviewedHashes, setReviewedHashes] = useState<Set<string>>(new Set());
   const agentRef = useRef<MikuAgent | null>(null);
   const initializedRef = useRef(false);
+  const hasLoadedFromServer = useRef(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load preferences from server when authenticated
+  const loadFromServer = useCallback(async () => {
+    if (!isSignedIn || hasLoadedFromServer.current) return;
+
+    try {
+      const response = await fetch('/api/preferences');
+      if (response.ok) {
+        const data = await response.json();
+
+        // If server has API keys, use them
+        const serverKeys = data.apiKeys || {};
+        if (data.selectedProvider && data.selectedModel) {
+          const apiKey = serverKeys[data.selectedProvider as AIProvider];
+          if (apiKey) {
+            const config: AIProviderConfig = {
+              provider: data.selectedProvider as AIProvider,
+              model: data.selectedModel,
+              apiKey,
+            };
+            setAIConfigState(config);
+            agentRef.current = createMikuAgent(config.provider, config.apiKey, config.model);
+            setIsUsingDefaults(false);
+
+            // Also save to localStorage for offline use
+            try {
+              localStorage.setItem('miku-ai-config', JSON.stringify({
+                provider: config.provider,
+                model: config.model,
+              }));
+              localStorage.setItem('miku-api-keys', JSON.stringify(serverKeys));
+            } catch (e) {
+              console.error('Failed to save to localStorage:', e);
+            }
+          }
+        }
+        hasLoadedFromServer.current = true;
+      }
+    } catch (e) {
+      console.error('Failed to load preferences from server:', e);
+    }
+  }, [isSignedIn]);
+
+  // Save preferences to server (debounced)
+  const saveToServer = useCallback(async (config: AIProviderConfig | null) => {
+    if (!isSignedIn) return;
+
+    try {
+      // Get current API keys from localStorage
+      const savedKeys = localStorage.getItem('miku-api-keys');
+      const keys = savedKeys ? JSON.parse(savedKeys) : {};
+
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedProvider: config?.provider || 'openai',
+          selectedModel: config?.model || 'gpt-4o',
+          apiKeys: keys,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save preferences to server:', e);
+    }
+  }, [isSignedIn]);
 
   // Initialize with defaults on mount
   useEffect(() => {
@@ -98,6 +168,13 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Load from server when user signs in
+  useEffect(() => {
+    if (isSignedIn && !hasLoadedFromServer.current) {
+      loadFromServer();
+    }
+  }, [isSignedIn, loadFromServer]);
+
   const setAIConfig = useCallback((config: AIProviderConfig | null) => {
     setAIConfigState(config);
     setIsUsingDefaults(false);
@@ -112,6 +189,14 @@ export function MikuProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error('Failed to save config:', e);
       }
+
+      // Sync to server (debounced)
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        saveToServer(config);
+      }, 500);
     } else {
       agentRef.current = null;
       try {
@@ -120,7 +205,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         console.error('Failed to clear config:', e);
       }
     }
-  }, []);
+  }, [saveToServer]);
 
   const clearReviewedHashes = useCallback(() => {
     setReviewedHashes(new Set());
@@ -237,11 +322,31 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const requestRewrite = useCallback(async (text: string): Promise<string> => {
+    if (!text.trim()) {
+      return text;
+    }
+
+    // If we have an AI agent configured, use it
+    if (agentRef.current) {
+      try {
+        return await agentRef.current.rewrite(text);
+      } catch (error) {
+        console.error('AI rewrite error:', error);
+        throw error;
+      }
+    } else {
+      // No AI configured, return original text
+      throw new Error('No AI provider configured. Please add your API key in settings.');
+    }
+  }, []);
+
   return (
     <MikuContext.Provider
       value={{
         state,
         requestReview,
+        requestRewrite,
         setActiveSuggestion,
         acceptSuggestion,
         dismissSuggestion,
