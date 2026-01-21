@@ -80,6 +80,8 @@ export class MikuAgent {
   private processToolCall(toolCall: ToolCall): { result: string; suggestion?: Suggestion } {
     const { name, arguments: args, id } = toolCall;
 
+    console.log('[MikuAgent] Processing tool call:', name, 'with args:', JSON.stringify(args, null, 2));
+
     switch (name) {
       case 'highlight_text': {
         const suggestion = parseHighlightToolCall(
@@ -87,6 +89,7 @@ export class MikuAgent {
           args,
           this.documentLines
         );
+        console.log('[MikuAgent] Parsed suggestion:', suggestion);
         return {
           result: suggestion
             ? `Successfully highlighted text at line ${args.line_number}`
@@ -154,6 +157,13 @@ export class MikuAgent {
 
       const response = await this.provider.chat(messages, EDITOR_TOOLS);
 
+      console.log('[MikuAgent] Provider response:', {
+        hasContent: !!response.content,
+        toolCallsCount: response.toolCalls.length,
+        finishReason: response.finishReason,
+        toolCalls: response.toolCalls.map(tc => ({ name: tc.name, id: tc.id })),
+      });
+
       // Process any text content
       if (response.content) {
         messages.push({ role: 'assistant', content: response.content });
@@ -194,6 +204,13 @@ export class MikuAgent {
 
     // Filter out overlapping suggestions - keep only the first suggestion for each text range
     const filteredSuggestions = this.filterOverlappingSuggestions(suggestions);
+
+    console.log('[MikuAgent] Review complete:', {
+      totalSuggestions: suggestions.length,
+      filteredSuggestions: filteredSuggestions.length,
+      iterations: iteration,
+      summary: summary.substring(0, 100),
+    });
 
     return {
       suggestions: filteredSuggestions,
