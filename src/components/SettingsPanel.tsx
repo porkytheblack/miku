@@ -43,7 +43,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     aiConfig?.provider || 'openrouter'
   );
   const [selectedModel, setSelectedModel] = useState<string>(
-    aiConfig?.model || 'anthropic/claude-sonnet-4'
+    aiConfig?.model || 'anthropic/claude-sonnet-4.5'
   );
   const [baseUrl, setBaseUrl] = useState<string>(
     aiConfig?.baseUrl || ''

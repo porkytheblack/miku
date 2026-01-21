@@ -56,33 +56,39 @@ export interface AIModelOption {
 
 // OpenRouter models that support tool calling
 export const OPENROUTER_MODELS: AIModelOption[] = [
-  // Anthropic via OpenRouter
+  // Anthropic via OpenRouter (Claude 4.5 series - latest)
+  { id: 'anthropic/claude-opus-4.5', name: 'Claude Opus 4.5', provider: 'openrouter', supportsTools: true },
+  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'openrouter', supportsTools: true },
+  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', provider: 'openrouter', supportsTools: true },
+  // Anthropic via OpenRouter (Claude 4 series)
   { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'openrouter', supportsTools: true },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'openrouter', supportsTools: true },
-  { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku', provider: 'openrouter', supportsTools: true },
-  { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', provider: 'openrouter', supportsTools: true },
-  // OpenAI via OpenRouter
+  // OpenAI via OpenRouter (latest models)
+  { id: 'openai/gpt-5', name: 'GPT-5', provider: 'openrouter', supportsTools: true },
+  { id: 'openai/o3', name: 'OpenAI o3', provider: 'openrouter', supportsTools: true },
+  { id: 'openai/o4-mini', name: 'OpenAI o4-mini', provider: 'openrouter', supportsTools: true },
   { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'openrouter', supportsTools: true },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openrouter', supportsTools: true },
-  { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openrouter', supportsTools: true },
-  { id: 'openai/o1', name: 'OpenAI o1', provider: 'openrouter', supportsTools: true },
-  { id: 'openai/o1-mini', name: 'OpenAI o1 Mini', provider: 'openrouter', supportsTools: true },
-  // Google via OpenRouter
-  { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', provider: 'openrouter', supportsTools: true },
-  { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', provider: 'openrouter', supportsTools: true },
-  { id: 'google/gemini-flash-1.5', name: 'Gemini 1.5 Flash', provider: 'openrouter', supportsTools: true },
+  { id: 'openai/gpt-4.5', name: 'GPT-4.5', provider: 'openrouter', supportsTools: true },
+  // Google via OpenRouter (Gemini 3 - latest)
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'openrouter', supportsTools: true },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', provider: 'openrouter', supportsTools: true },
+  // Google via OpenRouter (Gemini 2.5)
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter', supportsTools: true },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'openrouter', supportsTools: true },
+  { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'openrouter', supportsTools: true },
   // Meta Llama via OpenRouter
+  { id: 'meta-llama/llama-4-70b', name: 'Llama 4 70B', provider: 'openrouter', supportsTools: true },
   { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', provider: 'openrouter', supportsTools: true },
   { id: 'meta-llama/llama-3.1-405b-instruct', name: 'Llama 3.1 405B', provider: 'openrouter', supportsTools: true },
-  { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', provider: 'openrouter', supportsTools: true },
   // Mistral via OpenRouter
-  { id: 'mistralai/mistral-large-2411', name: 'Mistral Large', provider: 'openrouter', supportsTools: true },
+  { id: 'mistralai/mistral-large', name: 'Mistral Large', provider: 'openrouter', supportsTools: true },
   { id: 'mistralai/mistral-medium', name: 'Mistral Medium', provider: 'openrouter', supportsTools: true },
   { id: 'mistralai/mixtral-8x22b-instruct', name: 'Mixtral 8x22B', provider: 'openrouter', supportsTools: true },
   // Qwen via OpenRouter
   { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', provider: 'openrouter', supportsTools: true },
   { id: 'qwen/qwen-2.5-coder-32b-instruct', name: 'Qwen 2.5 Coder 32B', provider: 'openrouter', supportsTools: true },
   // DeepSeek via OpenRouter
+  { id: 'deepseek/deepseek-v4', name: 'DeepSeek V4', provider: 'openrouter', supportsTools: true },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', provider: 'openrouter', supportsTools: true },
   { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', provider: 'openrouter', supportsTools: true },
   // Cohere via OpenRouter
@@ -90,35 +96,45 @@ export const OPENROUTER_MODELS: AIModelOption[] = [
   { id: 'cohere/command-r', name: 'Command R', provider: 'openrouter', supportsTools: true },
 ];
 
-// Direct API models (legacy, kept for backwards compatibility)
+// Direct API models for native provider access
 export const AI_MODELS: AIModelOption[] = [
-  // OpenAI models
+  // OpenAI models (latest)
+  { id: 'gpt-5', name: 'GPT-5', provider: 'openai', supportsTools: true },
+  { id: 'o3', name: 'OpenAI o3', provider: 'openai', supportsTools: true },
+  { id: 'o4-mini', name: 'OpenAI o4-mini', provider: 'openai', supportsTools: true },
+  { id: 'gpt-4.5-preview', name: 'GPT-4.5', provider: 'openai', supportsTools: true },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', supportsTools: true },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', supportsTools: true },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', supportsTools: true },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', supportsTools: true },
-  // Anthropic models
+  // Anthropic models (Claude 4.5 series - latest)
+  { id: 'claude-opus-4-5-20251124', name: 'Claude Opus 4.5', provider: 'anthropic', supportsTools: true },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic', supportsTools: true },
+  { id: 'claude-haiku-4-5-20251015', name: 'Claude Haiku 4.5', provider: 'anthropic', supportsTools: true },
+  // Anthropic models (Claude 4 series)
   { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', supportsTools: true },
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', supportsTools: true },
-  { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'anthropic', supportsTools: true },
-  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', supportsTools: true },
-  // Google models
+  // Google models (Gemini 3 - latest)
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google', supportsTools: true },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', provider: 'google', supportsTools: true },
+  // Google models (Gemini 2.5)
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', supportsTools: true },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', supportsTools: true },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google', supportsTools: true },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'google', supportsTools: true },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'google', supportsTools: true },
 ];
 
 // Common local models for LM Studio and Ollama
 export const LOCAL_LLM_MODELS: AIModelOption[] = [
-  // These are suggestions - actual models depend on what's installed
+  // These are suggestions - actual models depend on what's installed locally
+  // Click "Refresh" in settings to fetch available models from your local server
+  { id: 'llama4', name: 'Llama 4', provider: 'ollama', supportsTools: true },
+  { id: 'llama3.3', name: 'Llama 3.3', provider: 'ollama', supportsTools: true },
   { id: 'llama3.2', name: 'Llama 3.2', provider: 'ollama', supportsTools: true },
-  { id: 'llama3.1', name: 'Llama 3.1', provider: 'ollama', supportsTools: true },
+  { id: 'qwen2.5', name: 'Qwen 2.5', provider: 'ollama', supportsTools: true },
+  { id: 'qwen2.5-coder', name: 'Qwen 2.5 Coder', provider: 'ollama', supportsTools: true },
+  { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'ollama', supportsTools: true },
+  { id: 'deepseek-v4', name: 'DeepSeek V4', provider: 'ollama', supportsTools: true },
   { id: 'mistral', name: 'Mistral', provider: 'ollama', supportsTools: true },
   { id: 'mixtral', name: 'Mixtral', provider: 'ollama', supportsTools: true },
-  { id: 'qwen2.5', name: 'Qwen 2.5', provider: 'ollama', supportsTools: true },
-  { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'ollama', supportsTools: true },
-  { id: 'codellama', name: 'Code Llama', provider: 'ollama', supportsTools: false },
-  { id: 'phi3', name: 'Phi-3', provider: 'ollama', supportsTools: true },
+  { id: 'phi4', name: 'Phi-4', provider: 'ollama', supportsTools: true },
+  { id: 'gemma2', name: 'Gemma 2', provider: 'ollama', supportsTools: true },
 ];
 
 // Editor Tool Types for AI Agent
@@ -161,8 +177,8 @@ export interface DefaultAgentConfig {
 
 // Environment-based defaults (can be overridden via .env.local)
 export const DEFAULT_AGENT_CONFIG: Partial<DefaultAgentConfig> = {
-  provider: (process.env.NEXT_PUBLIC_DEFAULT_AI_PROVIDER as AIProvider) || 'anthropic',
-  model: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'claude-sonnet-4-20250514',
+  provider: (process.env.NEXT_PUBLIC_DEFAULT_AI_PROVIDER as AIProvider) || 'openrouter',
+  model: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'anthropic/claude-sonnet-4.5',
   // API key should be set via environment variable for security
   apiKey: process.env.NEXT_PUBLIC_DEFAULT_AI_API_KEY || '',
 };
