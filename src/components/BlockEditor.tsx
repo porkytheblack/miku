@@ -96,12 +96,8 @@ export default function BlockEditor() {
   const getContentForReview = useCallback(() => {
     if (acceptedRevisions.length === 0) return content;
 
-    // Create a version of content that marks accepted revisions
-    // We'll add markers that the AI should skip
-    let reviewContent = content;
-    const exclusions: string[] = [];
-
     // Collect all accepted revision texts that are still in the document
+    const exclusions: string[] = [];
     for (const revision of acceptedRevisions) {
       if (content.includes(revision.revisedText)) {
         exclusions.push(revision.revisedText);
@@ -109,11 +105,11 @@ export default function BlockEditor() {
     }
 
     if (exclusions.length > 0) {
-      // Add a note to the content about what to skip
-      reviewContent = `[Note: The following text segments have already been reviewed and accepted. Please do not suggest changes to them: ${exclusions.map(e => `"${e}"`).join(', ')}]\n\n${content}`;
+      // Add a note AFTER the content so line numbers aren't affected
+      return `${content}\n\n---\n[Note to reviewer: The following text segments have already been reviewed and accepted by the user. Please do not suggest changes to them: ${exclusions.map(e => `"${e}"`).join(', ')}]`;
     }
 
-    return reviewContent;
+    return content;
   }, [content, acceptedRevisions]);
 
   // Manual review function

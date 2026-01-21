@@ -149,7 +149,8 @@ Your review process:
 
 Guidelines:
 - Focus on substantive improvements, not nitpicks
-- Limit suggestions to the most impactful changes (aim for 3-7 per review)
+- Review the ENTIRE document from start to finish, not just the beginning
+- For longer documents, make sure to review ALL sections including middle and end portions
 - Preserve the writer's unique voice and style
 - If the writing is good, acknowledge that - not everything needs fixing
 - Be specific in your observations - explain why something could be improved
