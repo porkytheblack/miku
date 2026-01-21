@@ -6,12 +6,14 @@ import FloatingBar from "@/components/FloatingBar";
 import WorkspaceSelector from "@/components/WorkspaceSelector";
 import FileBrowser from "@/components/FileBrowser";
 import TopBar from "@/components/TopBar";
+import SoundNotifier from "@/components/SoundNotifier";
 
 export default function Home() {
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState(false);
 
   return (
     <main className="relative min-h-screen flex flex-col">
+      <SoundNotifier />
       <WorkspaceSelector />
       <TopBar />
       <div className="flex-1 flex overflow-hidden">

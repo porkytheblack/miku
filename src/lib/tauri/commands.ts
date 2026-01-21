@@ -14,6 +14,7 @@ export interface EditorSettings {
   review_mode: string;
   aggressiveness: string;
   writing_context: string;
+  sound_enabled: boolean;
 }
 
 export interface Document {
@@ -102,6 +103,7 @@ export function toBackendSettings(settings: {
   reviewMode: string;
   aggressiveness: string;
   writingContext: string;
+  soundEnabled: boolean;
 }): EditorSettings {
   return {
     theme: settings.theme,
@@ -112,6 +114,7 @@ export function toBackendSettings(settings: {
     review_mode: settings.reviewMode,
     aggressiveness: settings.aggressiveness,
     writing_context: settings.writingContext,
+    sound_enabled: settings.soundEnabled,
   };
 }
 
@@ -127,6 +130,7 @@ export function toFrontendSettings(settings: EditorSettings): {
   reviewMode: 'auto' | 'manual';
   aggressiveness: 'gentle' | 'balanced' | 'strict';
   writingContext: string;
+  soundEnabled: boolean;
 } {
   return {
     theme: settings.theme as 'light' | 'dark' | 'system',
@@ -137,6 +141,7 @@ export function toFrontendSettings(settings: EditorSettings): {
     reviewMode: settings.review_mode as 'auto' | 'manual',
     aggressiveness: settings.aggressiveness as 'gentle' | 'balanced' | 'strict',
     writingContext: settings.writing_context,
+    soundEnabled: settings.sound_enabled ?? true,
   };
 }
 

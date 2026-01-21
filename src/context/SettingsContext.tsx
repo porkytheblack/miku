@@ -19,6 +19,7 @@ const defaultSettings: EditorSettings = {
   reviewMode: 'manual',
   aggressiveness: 'balanced',
   writingContext: '',
+  soundEnabled: true,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

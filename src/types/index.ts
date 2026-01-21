@@ -26,6 +26,7 @@ export interface EditorSettings {
   reviewMode: ReviewMode;
   aggressiveness: AggressivenessLevel;
   writingContext: string;
+  soundEnabled: boolean;
 }
 
 export type MikuStatus = 'idle' | 'thinking' | 'ready' | 'error';

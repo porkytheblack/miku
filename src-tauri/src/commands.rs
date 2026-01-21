@@ -31,6 +31,12 @@ pub struct EditorSettings {
     pub review_mode: String,
     pub aggressiveness: String,
     pub writing_context: String,
+    #[serde(default = "default_sound_enabled")]
+    pub sound_enabled: bool,
+}
+
+fn default_sound_enabled() -> bool {
+    true
 }
 
 impl Default for EditorSettings {
@@ -44,6 +50,7 @@ impl Default for EditorSettings {
             review_mode: "manual".to_string(),
             aggressiveness: "balanced".to_string(),
             writing_context: String::new(),
+            sound_enabled: true,
         }
     }
 }
@@ -178,6 +185,7 @@ mod tests {
         assert_eq!(settings.review_mode, "manual");
         assert_eq!(settings.aggressiveness, "balanced");
         assert!(settings.writing_context.is_empty());
+        assert!(settings.sound_enabled);
     }
 
     #[test]

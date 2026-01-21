@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useDocument } from '@/context/DocumentContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { isTauri } from '@/lib/tauri';
 import SettingsPanel from './SettingsPanel';
 
@@ -13,6 +14,7 @@ interface FloatingBarProps {
 export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
   const { state, requestReview } = useMiku();
   const { document, openDocument, saveDocument, newDoc } = useDocument();
+  const { selectWorkspace, workspace } = useWorkspace();
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showFileMenu, setShowFileMenu] = useState(false);
@@ -224,6 +226,31 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
                       <span>Save As...</span>
                       <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>Cmd+Shift+S</span>
                     </button>
+                    <div
+                      style={{
+                        height: '1px',
+                        background: 'var(--border-default)',
+                        margin: '4px 0',
+                      }}
+                    />
+                    <button
+                      onClick={() => { selectWorkspace(); setShowFileMenu(false); }}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[var(--bg-tertiary)] flex items-center justify-between"
+                      style={{ fontSize: '14px', color: 'var(--text-primary)' }}
+                    >
+                      <span>Change Workspace...</span>
+                    </button>
+                    {workspace.currentWorkspace && (
+                      <div
+                        className="px-3 py-1"
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-tertiary)',
+                        }}
+                      >
+                        {workspace.currentWorkspace.name}
+                      </div>
+                    )}
                     {document.path && (
                       <div
                         className="px-3 py-2 border-t"
