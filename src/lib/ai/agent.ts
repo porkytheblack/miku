@@ -244,6 +244,33 @@ export class MikuAgent {
 
     return result;
   }
+
+  /**
+   * Rewrite the given text to improve clarity and style
+   */
+  async rewrite(text: string): Promise<string> {
+    const systemPrompt = `You are a skilled writing assistant. Your task is to rewrite the given text to improve its clarity, flow, and style while preserving the original meaning and intent.
+
+Guidelines:
+- Maintain the same tone and voice
+- Keep the same general length (don't expand significantly)
+- Fix any grammatical issues
+- Improve sentence structure and flow
+- Make the writing more concise where appropriate
+- Preserve any technical terms or specific jargon
+
+Respond with ONLY the rewritten text, no explanations or comments.`;
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Please rewrite the following text:\n\n${text}` },
+    ];
+
+    const response = await this.provider.chat(messages, []);
+
+    // Return the rewritten text (or original if something went wrong)
+    return response.content?.trim() || text;
+  }
 }
 
 // Factory function for creating the agent

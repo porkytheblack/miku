@@ -55,7 +55,7 @@ interface AcceptedRevision {
 
 export default function BlockEditor() {
   const { settings } = useSettings();
-  const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
+  const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
   const { document: docState, setContent: setDocContent } = useDocument();
   const [content, setContentLocal] = useState<string>('');
 
@@ -633,7 +633,7 @@ export default function BlockEditor() {
   }, [clearSuggestions, setActiveSuggestion]);
 
   // Rewrite selected text with AI
-  const handleRewriteSelection = useCallback(() => {
+  const handleRewriteSelection = useCallback(async () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -647,11 +647,31 @@ export default function BlockEditor() {
 
     const selectedText = content.slice(start, end);
 
-    // Dispatch event to request a rewrite of the selected text
-    window.dispatchEvent(new CustomEvent('miku:rewriteSelection', {
-      detail: { text: selectedText, startIndex: start, endIndex: end }
-    }));
-  }, [content]);
+    // Call the AI to rewrite the text
+    const result = await requestRewrite(selectedText, start, end);
+
+    if (result) {
+      // Apply the rewritten text
+      const newContent =
+        content.slice(0, result.startIndex) +
+        result.rewrittenText +
+        content.slice(result.endIndex);
+
+      // Update reviewedContentRef to prevent auto-adjustment
+      reviewedContentRef.current = newContent;
+
+      setContent(newContent);
+
+      // Restore cursor position after the rewritten text
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const newEnd = result.startIndex + result.rewrittenText.length;
+          textareaRef.current.setSelectionRange(newEnd, newEnd);
+          textareaRef.current.focus();
+        }
+      }, 0);
+    }
+  }, [content, requestRewrite]);
 
   // Listen for events from FloatingBar and keyboard shortcuts
   useEffect(() => {

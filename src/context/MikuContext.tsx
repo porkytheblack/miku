@@ -23,9 +23,16 @@ interface ReviewOptions {
   forceReview?: boolean;
 }
 
+interface RewriteResult {
+  rewrittenText: string;
+  startIndex: number;
+  endIndex: number;
+}
+
 interface MikuContextType {
   state: MikuState;
   requestReview: (text: string, options?: ReviewOptions) => void;
+  requestRewrite: (text: string, startIndex: number, endIndex: number) => Promise<RewriteResult | null>;
   setActiveSuggestion: (id: string | null) => void;
   acceptSuggestion: (id: string) => string | null;
   dismissSuggestion: (id: string) => void;
@@ -237,11 +244,52 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const requestRewrite = useCallback(async (
+    text: string,
+    startIndex: number,
+    endIndex: number
+  ): Promise<RewriteResult | null> => {
+    if (!text.trim()) return null;
+
+    setState(prev => ({ ...prev, status: 'thinking', error: null }));
+
+    if (agentRef.current) {
+      try {
+        const response = await agentRef.current.rewrite(text);
+
+        setState(prev => ({ ...prev, status: 'idle', error: null }));
+
+        return {
+          rewrittenText: response,
+          startIndex,
+          endIndex,
+        };
+      } catch (error) {
+        console.error('AI rewrite error:', error);
+        setState(prev => ({
+          ...prev,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Failed to rewrite',
+        }));
+        return null;
+      }
+    } else {
+      // No AI configured - just return the original text
+      setState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'No AI provider configured for rewrite',
+      }));
+      return null;
+    }
+  }, []);
+
   return (
     <MikuContext.Provider
       value={{
         state,
         requestReview,
+        requestRewrite,
         setActiveSuggestion,
         acceptSuggestion,
         dismissSuggestion,
