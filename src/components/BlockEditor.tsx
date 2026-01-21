@@ -460,13 +460,23 @@ export default function BlockEditor() {
     // Update suggestions in context (don't remove all, just update positions)
     updateSuggestions(remainingSuggestions);
 
-    // Track this revision for undo
-    setAcceptedRevisions(prev => [...prev, {
-      id: suggestion.id,
-      originalText: suggestion.originalText,
-      revisedText: suggestion.suggestedRevision,
-      position: startIndex,
-    }]);
+    // Track this revision for undo, and update positions of previous revisions
+    setAcceptedRevisions(prev => {
+      // Update positions of previous revisions that come after this edit
+      const updated = prev.map(r => {
+        if (r.position > endIndex) {
+          return { ...r, position: r.position + lengthDiff };
+        }
+        return r;
+      });
+      // Add the new revision
+      return [...updated, {
+        id: suggestion.id,
+        originalText: suggestion.originalText,
+        revisedText: suggestion.suggestedRevision,
+        position: startIndex,
+      }];
+    });
 
     setContent(newContent);
     // Don't reset lastReviewedContent - keep it so we don't re-review
@@ -478,18 +488,30 @@ export default function BlockEditor() {
 
     const lastRevision = acceptedRevisions[acceptedRevisions.length - 1];
 
-    // Find the revised text in the current content
-    const foundIndex = content.indexOf(lastRevision.revisedText);
-    if (foundIndex === -1) {
-      // Can't find the revised text - just remove from history
-      setAcceptedRevisions(prev => prev.slice(0, -1));
-      return;
+    // Use the stored position to find the revised text
+    // Verify it's actually there at that position
+    const expectedText = content.slice(
+      lastRevision.position,
+      lastRevision.position + lastRevision.revisedText.length
+    );
+
+    let undoPosition = lastRevision.position;
+
+    if (expectedText !== lastRevision.revisedText) {
+      // Position is wrong, fall back to searching
+      const foundIndex = content.indexOf(lastRevision.revisedText);
+      if (foundIndex === -1) {
+        // Can't find the revised text - just remove from history
+        setAcceptedRevisions(prev => prev.slice(0, -1));
+        return;
+      }
+      undoPosition = foundIndex;
     }
 
     // Calculate the length difference (opposite direction of accept)
     // When undoing: originalText replaces revisedText
     const lengthDiff = lastRevision.originalText.length - lastRevision.revisedText.length;
-    const endOfRevisedText = foundIndex + lastRevision.revisedText.length;
+    const endOfRevisedText = undoPosition + lastRevision.revisedText.length;
 
     // Update remaining suggestions' positions
     const adjustedSuggestions = state.suggestions.map(s => {
@@ -506,9 +528,9 @@ export default function BlockEditor() {
 
     // Replace the revised text with the original
     const newContent =
-      content.slice(0, foundIndex) +
+      content.slice(0, undoPosition) +
       lastRevision.originalText +
-      content.slice(foundIndex + lastRevision.revisedText.length);
+      content.slice(undoPosition + lastRevision.revisedText.length);
 
     // Update reviewedContentRef BEFORE setContent to prevent the useEffect
     // from re-adjusting positions (we've already done that manually)
@@ -519,8 +541,18 @@ export default function BlockEditor() {
       updateSuggestions(adjustedSuggestions);
     }
 
+    // Update positions of remaining accepted revisions and remove the last one
+    setAcceptedRevisions(prev => {
+      const remaining = prev.slice(0, -1);
+      return remaining.map(r => {
+        if (r.position > endOfRevisedText) {
+          return { ...r, position: r.position + lengthDiff };
+        }
+        return r;
+      });
+    });
+
     setContent(newContent);
-    setAcceptedRevisions(prev => prev.slice(0, -1));
     setLastReviewedContent('');
   }, [content, acceptedRevisions, state.suggestions, updateSuggestions]);
 
