@@ -506,6 +506,21 @@ export default function BlockEditor() {
     fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
   };
 
+  // Common text styles that must be identical for highlight alignment
+  const textStyles: React.CSSProperties = {
+    ...editorStyles,
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    whiteSpace: 'pre-wrap',
+    wordWrap: 'break-word',
+    overflowWrap: 'break-word',
+    lineHeight: settings.lineHeight,
+    letterSpacing: 'normal',
+    wordSpacing: 'normal',
+    textRendering: 'auto',
+  };
+
   return (
     <div
       className="editor-wrapper w-full"
@@ -516,11 +531,11 @@ export default function BlockEditor() {
       }}
     >
       <div
-        className="editor-container relative"
+        className="editor-container"
         style={{
           width: '100%',
           maxWidth: '100%',
-          padding: 'var(--spacing-8) var(--spacing-6)',
+          padding: '32px 24px',
           minHeight: 'calc(100vh - 100px)',
         }}
       >
@@ -542,25 +557,35 @@ export default function BlockEditor() {
             />
           </div>
         ) : (
-          <>
-            {/* Highlight backdrop layer - must match textarea exactly */}
+          /* Editor with highlight overlay */
+          <div
+            className="editor-highlight-container"
+            style={{
+              position: 'relative',
+              width: '100%',
+              minHeight: 'calc(100vh - 200px)',
+            }}
+          >
+            {/* Highlight backdrop layer - positioned identically to textarea */}
             <div
               ref={highlightRef}
               className="highlight-backdrop"
               onClick={handleHighlightClick}
+              aria-hidden="true"
               style={{
+                ...textStyles,
                 position: 'absolute',
-                top: 'var(--spacing-8)',
-                left: 'var(--spacing-6)',
-                right: 'var(--spacing-6)',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 color: 'transparent',
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-                wordBreak: 'break-word',
                 overflow: 'hidden',
                 pointerEvents: 'none',
                 zIndex: 1,
-                ...editorStyles,
+                // Ensure highlight marks are clickable
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
               }}
               dangerouslySetInnerHTML={{ __html: highlightedHTML }}
             />
@@ -574,16 +599,16 @@ export default function BlockEditor() {
               onScroll={syncScroll}
               className="editor-textarea w-full resize-none border-none outline-none"
               style={{
+                ...textStyles,
                 position: 'relative',
+                width: '100%',
+                minHeight: 'calc(100vh - 200px)',
                 background: 'transparent',
                 color: 'var(--text-primary)',
                 caretColor: 'var(--accent-primary)',
-                minHeight: 'calc(100vh - 200px)',
-                width: '100%',
-                display: 'block',
                 zIndex: 2,
-                wordBreak: 'break-word',
-                ...editorStyles,
+                outline: 'none',
+                resize: 'none',
               }}
               placeholder={settings.reviewMode === 'manual'
                 ? `Start writing...
@@ -605,7 +630,7 @@ Tips:
               spellCheck={false}
               aria-label="Writing editor"
             />
-          </>
+          </div>
         )}
 
         {/* Slash command menu */}
@@ -707,6 +732,11 @@ Tips:
       <style jsx>{`
         .editor-textarea {
           field-sizing: content;
+          /* Reset all potentially different defaults */
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
 
         .editor-textarea::placeholder {
@@ -720,6 +750,16 @@ Tips:
 
         .highlight-backdrop {
           user-select: none;
+          /* Match textarea text rendering exactly */
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ensure marks inside highlight layer can receive clicks */
+        .highlight-backdrop :global(mark) {
+          pointer-events: auto;
         }
 
         .status-indicator {
