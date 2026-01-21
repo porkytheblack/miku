@@ -209,10 +209,18 @@ export default function NotesModal({ isOpen, onClose, onLoadNote }: NotesModalPr
           ) : (
             <div className="space-y-1">
               {filteredNotes.map((note, index) => (
-                <button
+                <div
                   key={note.id}
                   onClick={() => handleSelectNote(note)}
-                  className="w-full text-left p-3 rounded-lg transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelectNote(note);
+                    }
+                  }}
+                  className="w-full text-left p-3 rounded-lg transition-colors cursor-pointer"
                   style={{
                     background: index === selectedIndex ? 'var(--bg-tertiary)' : 'transparent',
                   }}
@@ -261,7 +269,7 @@ export default function NotesModal({ isOpen, onClose, onLoadNote }: NotesModalPr
                       </svg>
                     </button>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
