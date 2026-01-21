@@ -5,15 +5,21 @@ import BlockEditor from "@/components/BlockEditor";
 import FloatingBar from "@/components/FloatingBar";
 import WorkspaceSelector from "@/components/WorkspaceSelector";
 import FileBrowser from "@/components/FileBrowser";
+import TopBar from "@/components/TopBar";
 
 export default function Home() {
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState(false);
 
   return (
-    <main className="relative min-h-screen">
+    <main className="relative min-h-screen flex flex-col">
       <WorkspaceSelector />
-      <FileBrowser isOpen={isFileBrowserOpen} onClose={() => setIsFileBrowserOpen(false)} />
-      <BlockEditor />
+      <TopBar />
+      <div className="flex-1 flex overflow-hidden">
+        <FileBrowser isOpen={isFileBrowserOpen} onClose={() => setIsFileBrowserOpen(false)} />
+        <div className="flex-1 overflow-auto">
+          <BlockEditor />
+        </div>
+      </div>
       <FloatingBar onToggleFileBrowser={() => setIsFileBrowserOpen(prev => !prev)} />
     </main>
   );

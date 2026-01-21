@@ -452,6 +452,8 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
     { category: 'Editing', items: [
       { keys: ['Cmd', 'Enter'], description: 'Request AI review' },
       { keys: ['Cmd', 'R'], description: 'Rewrite selected text' },
+      { keys: ['Cmd', 'Shift', 'A'], description: 'Accept all suggestions' },
+      { keys: ['Cmd', 'Shift', 'D'], description: 'Decline all suggestions' },
       { keys: ['/'], description: 'Slash commands (at line start)' },
     ]},
     { category: 'View', items: [

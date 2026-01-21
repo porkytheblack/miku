@@ -660,11 +660,22 @@ export default function BlockEditor() {
     const handleAcceptAllEvent = () => handleAcceptAll();
     const handleDeclineAllEvent = () => handleDeclineAll();
 
-    // Keyboard shortcut for Cmd+R to rewrite selection
+    // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+R: Rewrite selection
       if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
         e.preventDefault();
         handleRewriteSelection();
+      }
+      // Cmd+Shift+A: Accept all suggestions
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
+        e.preventDefault();
+        handleAcceptAll();
+      }
+      // Cmd+Shift+D: Decline all suggestions
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'd') {
+        e.preventDefault();
+        handleDeclineAll();
       }
     };
 

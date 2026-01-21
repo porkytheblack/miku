@@ -3,6 +3,13 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { isTauri, safeTauriCall, openFile, saveFile, addRecentFile, getRecentFiles } from '@/lib/tauri';
 
+interface OpenDocument {
+  id: string;
+  path: string | null;
+  content: string;
+  isModified: boolean;
+}
+
 interface DocumentState {
   path: string | null;
   content: string;
@@ -12,34 +19,55 @@ interface DocumentState {
 
 interface DocumentContextType {
   document: DocumentState;
+  openDocuments: OpenDocument[];
+  activeDocumentId: string | null;
   setContent: (content: string) => void;
   openDocument: (path?: string) => Promise<void>;
   saveDocument: (path?: string) => Promise<void>;
   newDoc: () => void;
   loadRecentFiles: () => Promise<void>;
+  switchToDocument: (id: string) => void;
+  closeDocument: (id: string) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
 
+// Generate unique ID for documents
+let docIdCounter = 0;
+function generateDocId(): string {
+  return `doc-${++docIdCounter}-${Date.now()}`;
+}
+
 export function DocumentProvider({ children }: { children: ReactNode }) {
-  const [document, setDocument] = useState<DocumentState>({
-    path: null,
-    content: '',
-    isModified: false,
-    recentFiles: [],
-  });
+  const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>([
+    { id: generateDocId(), path: null, content: '', isModified: false }
+  ]);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(openDocuments[0]?.id || null);
+  const [recentFiles, setRecentFiles] = useState<string[]>([]);
+
+  // Get the active document
+  const activeDocument = openDocuments.find(d => d.id === activeDocumentId);
+
+  // Legacy document state for backward compatibility
+  const document: DocumentState = {
+    path: activeDocument?.path || null,
+    content: activeDocument?.content || '',
+    isModified: activeDocument?.isModified || false,
+    recentFiles,
+  };
 
   const setContent = useCallback((content: string) => {
-    setDocument(prev => ({
-      ...prev,
-      content,
-      isModified: true,
-    }));
-  }, []);
+    if (!activeDocumentId) return;
+    setOpenDocuments(prev => prev.map(doc =>
+      doc.id === activeDocumentId
+        ? { ...doc, content, isModified: true }
+        : doc
+    ));
+  }, [activeDocumentId]);
 
   const loadRecentFiles = useCallback(async () => {
     const files = await safeTauriCall(getRecentFiles, []);
-    setDocument(prev => ({ ...prev, recentFiles: files }));
+    setRecentFiles(files);
   }, []);
 
   const openDocument = useCallback(async (path?: string) => {
@@ -67,37 +95,50 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         filePath = selected as string;
       }
 
+      // Check if the file is already open
+      const existingDoc = openDocuments.find(d => d.path === filePath);
+      if (existingDoc) {
+        setActiveDocumentId(existingDoc.id);
+        return;
+      }
+
       const doc = await openFile(filePath);
       await addRecentFile(filePath);
 
-      setDocument(prev => ({
-        ...prev,
+      // Create a new document tab
+      const newDoc: OpenDocument = {
+        id: generateDocId(),
         path: doc.path,
         content: doc.content,
         isModified: false,
-      }));
+      };
+
+      setOpenDocuments(prev => [...prev, newDoc]);
+      setActiveDocumentId(newDoc.id);
 
       await loadRecentFiles();
     } catch (error) {
       console.error('Failed to open file:', error);
     }
-  }, [loadRecentFiles]);
+  }, [openDocuments, loadRecentFiles]);
 
   const saveDocument = useCallback(async (path?: string) => {
+    if (!activeDocument) return;
+
     if (!isTauri()) {
       // In browser mode, download the file
-      const blob = new Blob([document.content], { type: 'text/markdown' });
+      const blob = new Blob([activeDocument.content], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement('a');
       a.href = url;
-      a.download = document.path?.split('/').pop() || 'untitled.md';
+      a.download = activeDocument.path?.split('/').pop() || 'untitled.md';
       a.click();
       URL.revokeObjectURL(url);
       return;
     }
 
     try {
-      let filePath = path || document.path;
+      let filePath = path || activeDocument.path;
 
       if (!filePath) {
         // Use Tauri's dialog to pick a save location
@@ -114,39 +155,75 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         filePath = selected;
       }
 
-      await saveFile(filePath, document.content);
+      await saveFile(filePath, activeDocument.content);
       await addRecentFile(filePath);
 
-      setDocument(prev => ({
-        ...prev,
-        path: filePath,
-        isModified: false,
-      }));
+      setOpenDocuments(prev => prev.map(doc =>
+        doc.id === activeDocumentId
+          ? { ...doc, path: filePath, isModified: false }
+          : doc
+      ));
 
       await loadRecentFiles();
     } catch (error) {
       console.error('Failed to save file:', error);
     }
-  }, [document.content, document.path, loadRecentFiles]);
+  }, [activeDocument, activeDocumentId, loadRecentFiles]);
 
   const newDoc = useCallback(() => {
-    setDocument(prev => ({
-      ...prev,
+    const newDocument: OpenDocument = {
+      id: generateDocId(),
       path: null,
       content: '',
       isModified: false,
-    }));
+    };
+    setOpenDocuments(prev => [...prev, newDocument]);
+    setActiveDocumentId(newDocument.id);
   }, []);
+
+  const switchToDocument = useCallback((id: string) => {
+    const doc = openDocuments.find(d => d.id === id);
+    if (doc) {
+      setActiveDocumentId(id);
+    }
+  }, [openDocuments]);
+
+  const closeDocument = useCallback((id: string) => {
+    setOpenDocuments(prev => {
+      const newDocs = prev.filter(d => d.id !== id);
+
+      // If we closed the active document, switch to another one
+      if (id === activeDocumentId && newDocs.length > 0) {
+        setActiveDocumentId(newDocs[newDocs.length - 1].id);
+      } else if (newDocs.length === 0) {
+        // If no documents left, create a new empty one
+        const emptyDoc: OpenDocument = {
+          id: generateDocId(),
+          path: null,
+          content: '',
+          isModified: false,
+        };
+        setActiveDocumentId(emptyDoc.id);
+        return [emptyDoc];
+      }
+
+      return newDocs;
+    });
+  }, [activeDocumentId]);
 
   return (
     <DocumentContext.Provider
       value={{
         document,
+        openDocuments,
+        activeDocumentId,
         setContent,
         openDocument,
         saveDocument,
         newDoc,
         loadRecentFiles,
+        switchToDocument,
+        closeDocument,
       }}
     >
       {children}
