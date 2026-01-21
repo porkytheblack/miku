@@ -38,6 +38,40 @@ function generateDocId(): string {
   return `doc-${++docIdCounter}-${Date.now()}`;
 }
 
+// Extract a suggested filename from document content
+function getSuggestedFilename(content: string): string {
+  if (!content.trim()) return 'untitled.md';
+
+  // Try to find a markdown heading (# Title)
+  const headingMatch = content.match(/^#\s+(.+)$/m);
+  if (headingMatch) {
+    return slugify(headingMatch[1]) + '.md';
+  }
+
+  // Fall back to the first non-empty line
+  const firstLine = content.split('\n').find(line => line.trim().length > 0);
+  if (firstLine) {
+    // Truncate to reasonable length and slugify
+    const truncated = firstLine.trim().slice(0, 50);
+    return slugify(truncated) + '.md';
+  }
+
+  return 'untitled.md';
+}
+
+// Convert a string to a safe filename
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[#*`\[\]()]/g, '') // Remove markdown characters
+    .replace(/[^\w\s-]/g, '') // Remove non-word characters except spaces and hyphens
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single
+    .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+    .slice(0, 50) // Limit length
+    || 'untitled';
+}
+
 export function DocumentProvider({ children }: { children: ReactNode }) {
   const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>([
     { id: generateDocId(), path: null, content: '', isModified: false }
@@ -125,13 +159,16 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const saveDocument = useCallback(async (path?: string) => {
     if (!activeDocument) return;
 
+    // Get a suggested filename based on document content
+    const suggestedFilename = activeDocument.path?.split('/').pop() || getSuggestedFilename(activeDocument.content);
+
     if (!isTauri()) {
       // In browser mode, download the file
       const blob = new Blob([activeDocument.content], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement('a');
       a.href = url;
-      a.download = activeDocument.path?.split('/').pop() || 'untitled.md';
+      a.download = suggestedFilename;
       a.click();
       URL.revokeObjectURL(url);
       return;
@@ -148,7 +185,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
             name: 'Markdown',
             extensions: ['md', 'markdown'],
           }],
-          defaultPath: 'untitled.md',
+          defaultPath: suggestedFilename,
         });
 
         if (!selected) return;
