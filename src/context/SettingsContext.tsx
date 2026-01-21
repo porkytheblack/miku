@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { EditorSettings, Theme } from '@/types';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { EditorSettings } from '@/types';
 
 interface SettingsContextType {
   settings: EditorSettings;
@@ -15,6 +15,9 @@ const defaultSettings: EditorSettings = {
   lineHeight: 1.6,
   editorWidth: 720,
   fontFamily: 'mono',
+  reviewMode: 'manual',
+  aggressiveness: 'balanced',
+  writingContext: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

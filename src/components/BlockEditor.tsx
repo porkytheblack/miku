@@ -4,6 +4,13 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useSettings } from '@/context/SettingsContext';
 import { HighlightType, Suggestion } from '@/types';
+import dynamic from 'next/dynamic';
+
+// Dynamically import markdown preview to avoid SSR issues
+const MarkdownPreview = dynamic(() => import('@uiw/react-markdown-preview').then(mod => mod.default), {
+  ssr: false,
+  loading: () => <div style={{ color: 'var(--text-tertiary)' }}>Loading preview...</div>
+});
 
 // Get highlight color for suggestion type
 function getHighlightColor(type: HighlightType): string {
@@ -40,6 +47,7 @@ export default function BlockEditor() {
   const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions } = useMiku();
   const [content, setContent] = useState<string>('');
   const [lastReviewedContent, setLastReviewedContent] = useState('');
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -60,15 +68,31 @@ export default function BlockEditor() {
     }
   }, []);
 
-  // Auto-review after pause
+  // Manual review function
+  const triggerManualReview = useCallback(() => {
+    if (content.trim()) {
+      requestReview(content, {
+        aggressiveness: settings.aggressiveness,
+        writingContext: settings.writingContext,
+        forceReview: true, // Force review even if content was reviewed before
+      });
+      setLastReviewedContent(content);
+    }
+  }, [content, requestReview, settings.aggressiveness, settings.writingContext]);
+
+  // Auto-review after pause (only in auto mode)
   useEffect(() => {
     if (pauseTimeoutRef.current) {
       clearTimeout(pauseTimeoutRef.current);
     }
 
-    if (content && content !== lastReviewedContent && state.status === 'idle') {
+    // Only auto-review if in auto mode
+    if (settings.reviewMode === 'auto' && content && content !== lastReviewedContent && state.status === 'idle') {
       pauseTimeoutRef.current = setTimeout(() => {
-        requestReview(content);
+        requestReview(content, {
+          aggressiveness: settings.aggressiveness,
+          writingContext: settings.writingContext,
+        });
         setLastReviewedContent(content);
       }, 3000);
     }
@@ -78,7 +102,7 @@ export default function BlockEditor() {
         clearTimeout(pauseTimeoutRef.current);
       }
     };
-  }, [content, lastReviewedContent, state.status, requestReview]);
+  }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext]);
 
   // Clear suggestions when content changes significantly
   useEffect(() => {
@@ -164,6 +188,13 @@ export default function BlockEditor() {
   }, [slashStartIndex]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle Cmd+Enter for manual review
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      triggerManualReview();
+      return;
+    }
+
     // Handle slash command menu
     if (showSlashMenu) {
       if (e.key === 'ArrowDown') {
@@ -222,7 +253,7 @@ export default function BlockEditor() {
         }
       }
     }
-  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content]);
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview]);
 
   const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
     if (slashStartIndex === null || !textareaRef.current) return;
@@ -297,6 +328,92 @@ export default function BlockEditor() {
         background: 'var(--bg-primary)',
       }}
     >
+      {/* Top toolbar with preview toggle and review button */}
+      <div
+        className="editor-toolbar"
+        style={{
+          position: 'fixed',
+          top: 'var(--spacing-4)',
+          right: 'var(--spacing-4)',
+          display: 'flex',
+          gap: 'var(--spacing-2)',
+          zIndex: 100,
+        }}
+      >
+        {/* Review button (only in manual mode) */}
+        {settings.reviewMode === 'manual' && (
+          <button
+            onClick={triggerManualReview}
+            disabled={state.status === 'thinking' || !content.trim()}
+            title="Review (Cmd+Enter)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              background: state.status === 'thinking' ? 'var(--bg-tertiary)' : 'var(--accent-primary)',
+              color: state.status === 'thinking' ? 'var(--text-tertiary)' : 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              cursor: state.status === 'thinking' || !content.trim() ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            {state.status === 'thinking' ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+                </svg>
+                Reviewing...
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                Review
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Preview toggle button */}
+        <button
+          onClick={() => setIsPreviewMode(!isPreviewMode)}
+          title={isPreviewMode ? 'Edit' : 'Preview'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '40px',
+            height: '40px',
+            background: isPreviewMode ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+            color: isPreviewMode ? 'white' : 'var(--text-secondary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            boxShadow: 'var(--shadow-md)',
+          }}
+        >
+          {isPreviewMode ? (
+            // Edit icon (pencil)
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          ) : (
+            // Eye icon for preview
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          )}
+        </button>
+      </div>
+
       <div
         className="editor-container relative"
         style={{
@@ -306,59 +423,90 @@ export default function BlockEditor() {
           minHeight: '100vh',
         }}
       >
-        {/* Highlight backdrop layer */}
-        <div
-          ref={highlightRef}
-          className="highlight-backdrop"
-          onClick={handleHighlightClick}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: 'var(--spacing-8) var(--spacing-6)',
-            color: 'transparent',
-            whiteSpace: 'pre-wrap',
-            wordWrap: 'break-word',
-            overflow: 'hidden',
-            pointerEvents: 'none',
-            zIndex: 3,
-            ...editorStyles,
-          }}
-          dangerouslySetInnerHTML={{ __html: highlightedHTML }}
-        />
+        {isPreviewMode ? (
+          /* Preview mode - rendered markdown */
+          <div
+            className="preview-container"
+            style={{
+              paddingTop: '60px', // Space for toolbar
+              ...editorStyles,
+            }}
+          >
+            <MarkdownPreview
+              source={content || '*Start writing to see preview...*'}
+              style={{
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                ...editorStyles,
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Highlight backdrop layer */}
+            <div
+              ref={highlightRef}
+              className="highlight-backdrop"
+              onClick={handleHighlightClick}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                padding: 'var(--spacing-8) var(--spacing-6)',
+                color: 'transparent',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                overflow: 'hidden',
+                pointerEvents: 'none',
+                zIndex: 3,
+                ...editorStyles,
+              }}
+              dangerouslySetInnerHTML={{ __html: highlightedHTML }}
+            />
 
-        {/* Actual textarea for editing */}
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onScroll={syncScroll}
-          className="editor-textarea w-full resize-none border-none outline-none"
-          style={{
-            position: 'relative',
-            background: 'transparent',
-            color: 'var(--text-primary)',
-            caretColor: 'var(--accent-primary)',
-            minHeight: 'calc(100vh - 128px)',
-            width: '100%',
-            display: 'block',
-            zIndex: 2,
-            ...editorStyles,
-          }}
-          placeholder="Start writing...
+            {/* Actual textarea for editing */}
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onScroll={syncScroll}
+              className="editor-textarea w-full resize-none border-none outline-none"
+              style={{
+                position: 'relative',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                caretColor: 'var(--accent-primary)',
+                minHeight: 'calc(100vh - 128px)',
+                width: '100%',
+                display: 'block',
+                zIndex: 2,
+                ...editorStyles,
+              }}
+              placeholder={settings.reviewMode === 'manual'
+                ? `Start writing...
+
+Press Cmd+Enter or click Review to analyze your writing.
+
+Tips:
+- Write naturally, Miku will suggest improvements
+- Type / at the start of a line for formatting options
+- Click the eye icon to preview your markdown`
+                : `Start writing...
 
 Miku will review your writing after you pause for a few seconds.
 
 Tips:
 - Write naturally, Miku will suggest improvements
 - Type / at the start of a line for formatting options
-- Highlighted text shows suggestions - click to see details"
-          spellCheck={false}
-          aria-label="Writing editor"
-        />
+- Highlighted text shows suggestions - click to see details`}
+              spellCheck={false}
+              aria-label="Writing editor"
+            />
+          </>
+        )}
 
         {/* Slash command menu */}
         {showSlashMenu && (

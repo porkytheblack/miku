@@ -13,12 +13,18 @@ export interface Suggestion {
   suggestedRevision: string;
 }
 
+export type ReviewMode = 'manual' | 'auto';
+export type AggressivenessLevel = 'gentle' | 'balanced' | 'strict';
+
 export interface EditorSettings {
   theme: Theme;
   fontSize: number;
   lineHeight: number;
   editorWidth: number;
   fontFamily: 'mono' | 'sans';
+  reviewMode: ReviewMode;
+  aggressiveness: AggressivenessLevel;
+  writingContext: string;
 }
 
 export type MikuStatus = 'idle' | 'thinking' | 'ready' | 'error';
@@ -84,6 +90,8 @@ export interface AgentMessage {
 export interface ReviewRequest {
   content: string;
   focusAreas?: HighlightType[];
+  aggressiveness?: AggressivenessLevel;
+  writingContext?: string;
 }
 
 export interface ReviewResponse {

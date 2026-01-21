@@ -1,13 +1,31 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
-import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG } from '@/types';
+import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG, AggressivenessLevel } from '@/types';
 import { createMikuAgent, MikuAgent } from '@/lib/ai/agent';
 import { analyzeSuggestions } from '@/lib/analyzer';
 
+// Simple hash function for content comparison
+function hashContent(text: string): string {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(36);
+}
+
+interface ReviewOptions {
+  focusAreas?: HighlightType[];
+  aggressiveness?: AggressivenessLevel;
+  writingContext?: string;
+  forceReview?: boolean;
+}
+
 interface MikuContextType {
   state: MikuState;
-  requestReview: (text: string, focusAreas?: HighlightType[]) => void;
+  requestReview: (text: string, options?: ReviewOptions) => void;
   setActiveSuggestion: (id: string | null) => void;
   acceptSuggestion: (id: string) => string | null;
   dismissSuggestion: (id: string) => void;
@@ -15,6 +33,8 @@ interface MikuContextType {
   setAIConfig: (config: AIProviderConfig | null) => void;
   aiConfig: AIProviderConfig | null;
   isUsingDefaults: boolean;
+  reviewedHashes: Set<string>;
+  clearReviewedHashes: () => void;
 }
 
 const initialState: MikuState = {
@@ -30,6 +50,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MikuState>(initialState);
   const [aiConfig, setAIConfigState] = useState<AIProviderConfig | null>(null);
   const [isUsingDefaults, setIsUsingDefaults] = useState(false);
+  const [reviewedHashes, setReviewedHashes] = useState<Set<string>>(new Set());
   const agentRef = useRef<MikuAgent | null>(null);
   const initializedRef = useRef(false);
 
@@ -100,9 +121,20 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const requestReview = useCallback(async (text: string, focusAreas?: HighlightType[]) => {
+  const clearReviewedHashes = useCallback(() => {
+    setReviewedHashes(new Set());
+  }, []);
+
+  const requestReview = useCallback(async (text: string, options?: ReviewOptions) => {
     if (!text.trim()) {
       setState(prev => ({ ...prev, status: 'idle', suggestions: [], error: null }));
+      return;
+    }
+
+    // Check if this content has already been reviewed (unless forced)
+    const contentHash = hashContent(text);
+    if (!options?.forceReview && reviewedHashes.has(contentHash)) {
+      // Content already reviewed, skip
       return;
     }
 
@@ -113,8 +145,13 @@ export function MikuProvider({ children }: { children: ReactNode }) {
       try {
         const response = await agentRef.current.review({
           content: text,
-          focusAreas,
+          focusAreas: options?.focusAreas,
+          aggressiveness: options?.aggressiveness,
+          writingContext: options?.writingContext,
         });
+
+        // Mark this content as reviewed
+        setReviewedHashes(prev => new Set(prev).add(contentHash));
 
         setState(prev => ({
           ...prev,
@@ -133,7 +170,11 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     } else {
       // Fall back to local analysis
       setTimeout(() => {
-        const suggestions = analyzeSuggestions(text);
+        const suggestions = analyzeSuggestions(text, options?.aggressiveness);
+
+        // Mark this content as reviewed
+        setReviewedHashes(prev => new Set(prev).add(contentHash));
+
         setState(prev => ({
           ...prev,
           status: suggestions.length > 0 ? 'ready' : 'idle',
@@ -142,7 +183,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         }));
       }, 1000);
     }
-  }, []);
+  }, [reviewedHashes]);
 
   const setActiveSuggestion = useCallback((id: string | null) => {
     setState(prev => ({ ...prev, activeSuggestionId: id }));
@@ -196,6 +237,8 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         setAIConfig,
         aiConfig,
         isUsingDefaults,
+        reviewedHashes,
+        clearReviewedHashes,
       }}
     >
       {children}

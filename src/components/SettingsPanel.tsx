@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
-import { Theme, AIProvider, AI_MODELS } from '@/types';
+import { Theme, AIProvider, AI_MODELS, ReviewMode, AggressivenessLevel } from '@/types';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -332,6 +332,157 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </span>
               </div>
             )}
+          </section>
+
+          {/* Miku Behavior section */}
+          <section>
+            <h3
+              className="mb-3"
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-medium)',
+              }}
+            >
+              Miku Behavior
+            </h3>
+
+            {/* Review Mode */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Review Mode
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { value: 'manual', label: 'Manual (Cmd+Enter)' },
+                  { value: 'auto', label: 'Auto' },
+                ] as { value: ReviewMode; label: string }[]).map(mode => (
+                  <button
+                    key={mode.value}
+                    onClick={() => updateSettings({ reviewMode: mode.value })}
+                    className="flex-1 py-2 px-3 rounded text-sm transition-colors"
+                    style={{
+                      background: settings.reviewMode === mode.value ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: settings.reviewMode === mode.value ? 'white' : 'var(--text-primary)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                {settings.reviewMode === 'manual'
+                  ? 'Press Cmd+Enter or click Review to analyze your writing.'
+                  : 'Miku will automatically review after you pause typing.'}
+              </p>
+            </div>
+
+            {/* Aggressiveness */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Aggressiveness
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { value: 'gentle', label: 'Gentle' },
+                  { value: 'balanced', label: 'Balanced' },
+                  { value: 'strict', label: 'Strict' },
+                ] as { value: AggressivenessLevel; label: string }[]).map(level => (
+                  <button
+                    key={level.value}
+                    onClick={() => updateSettings({ aggressiveness: level.value })}
+                    className="flex-1 py-2 px-3 rounded text-sm transition-colors"
+                    style={{
+                      background: settings.aggressiveness === level.value ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: settings.aggressiveness === level.value ? 'white' : 'var(--text-primary)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    {level.label}
+                  </button>
+                ))}
+              </div>
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                {settings.aggressiveness === 'gentle'
+                  ? 'Focus on major issues only, ignore minor style choices.'
+                  : settings.aggressiveness === 'balanced'
+                  ? 'Balance between helpfulness and respecting your style.'
+                  : 'Thorough review of grammar, style, and clarity.'}
+              </p>
+            </div>
+
+            {/* Writing Context */}
+            <div className="mb-4">
+              <label
+                className="block mb-2"
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                Writing Context (optional)
+              </label>
+              <textarea
+                value={settings.writingContext}
+                onChange={e => updateSettings({ writingContext: e.target.value })}
+                placeholder="e.g., Technical blog post, Academic essay, Creative fiction..."
+                rows={2}
+                className="w-full p-2 rounded resize-none"
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              />
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                Help Miku understand what you&apos;re writing for better suggestions.
+              </p>
+            </div>
           </section>
 
           {/* Appearance section */}
