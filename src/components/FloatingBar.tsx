@@ -56,11 +56,16 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
         e.preventDefault();
         saveDocument();
       }
+      // Cmd/Ctrl + B: Toggle file browser
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b' && onToggleFileBrowser) {
+        e.preventDefault();
+        onToggleFileBrowser();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [newDoc, openDocument, saveDocument]);
+  }, [newDoc, openDocument, saveDocument, onToggleFileBrowser]);
 
   const isVisible = isHovered || state.status !== 'idle' || showSettings || showFileMenu;
 
@@ -117,7 +122,7 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
                 onClick={onToggleFileBrowser}
                 className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
                 aria-label="File browser"
-                title="Open file browser"
+                title="Open file browser (Cmd+B)"
               >
                 <svg
                   width="16"

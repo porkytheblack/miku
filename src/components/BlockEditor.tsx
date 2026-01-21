@@ -508,9 +508,11 @@ export default function BlockEditor() {
 
   return (
     <div
-      className="editor-wrapper w-full min-h-screen"
+      className="editor-wrapper w-full"
       style={{
         background: 'var(--bg-primary)',
+        minHeight: '100vh',
+        paddingBottom: '100px', // Space for floating bar
       }}
     >
       <div
@@ -519,7 +521,7 @@ export default function BlockEditor() {
           width: '100%',
           maxWidth: '100%',
           padding: 'var(--spacing-8) var(--spacing-6)',
-          minHeight: '100vh',
+          minHeight: 'calc(100vh - 100px)',
         }}
       >
         {isPreviewMode ? (
@@ -541,24 +543,23 @@ export default function BlockEditor() {
           </div>
         ) : (
           <>
-            {/* Highlight backdrop layer */}
+            {/* Highlight backdrop layer - must match textarea exactly */}
             <div
               ref={highlightRef}
               className="highlight-backdrop"
               onClick={handleHighlightClick}
               style={{
                 position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                padding: 'var(--spacing-8) var(--spacing-6)',
+                top: 'var(--spacing-8)',
+                left: 'var(--spacing-6)',
+                right: 'var(--spacing-6)',
                 color: 'transparent',
                 whiteSpace: 'pre-wrap',
                 wordWrap: 'break-word',
+                wordBreak: 'break-word',
                 overflow: 'hidden',
                 pointerEvents: 'none',
-                zIndex: 3,
+                zIndex: 1,
                 ...editorStyles,
               }}
               dangerouslySetInnerHTML={{ __html: highlightedHTML }}
@@ -577,10 +578,11 @@ export default function BlockEditor() {
                 background: 'transparent',
                 color: 'var(--text-primary)',
                 caretColor: 'var(--accent-primary)',
-                minHeight: 'calc(100vh - 128px)',
+                minHeight: 'calc(100vh - 200px)',
                 width: '100%',
                 display: 'block',
                 zIndex: 2,
+                wordBreak: 'break-word',
                 ...editorStyles,
               }}
               placeholder={settings.reviewMode === 'manual'
