@@ -1,9 +1,10 @@
 import { Suggestion, AggressivenessLevel } from '@/types';
+import { LineMap } from './textPosition';
 
-// Helper to calculate line number from index
-function getLineNumber(text: string, index: number): number {
-  const textBeforeIndex = text.slice(0, index);
-  return (textBeforeIndex.match(/\n/g) || []).length + 1;
+// Helper to calculate line and column from index
+function getLineAndColumn(lineMap: LineMap, index: number): { line: number; column: number } {
+  const pos = lineMap.offsetToLineColumn(index);
+  return { line: pos.line, column: pos.column };
 }
 
 // Aggressiveness thresholds
@@ -33,6 +34,7 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
   const suggestions: Suggestion[] = [];
   let id = 0;
   const config = THRESHOLDS[aggressiveness];
+  const lineMap = new LineMap(text);
 
   // Check for long sentences (clarity)
   const sentences = text.split(/[.!?]+/).filter(s => s.trim());
@@ -47,10 +49,12 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
     const wordCount = trimmed.split(/\s+/).length;
 
     if (wordCount > config.longSentenceWords) {
+      const pos = getLineAndColumn(lineMap, startIndex);
       suggestions.push({
         id: `suggestion-${id++}`,
         type: 'clarity',
-        lineNumber: getLineNumber(text, startIndex),
+        lineNumber: pos.line,
+        columnNumber: pos.column,
         startIndex,
         endIndex: startIndex + trimmed.length,
         originalText: trimmed,
@@ -71,10 +75,12 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
       let match;
       while ((match = pattern.exec(text)) !== null) {
         const context = getContext(text, match.index, match[0].length);
+        const pos = getLineAndColumn(lineMap, context.startIndex);
         suggestions.push({
           id: `suggestion-${id++}`,
           type: 'style',
-          lineNumber: getLineNumber(text, context.startIndex),
+          lineNumber: pos.line,
+          columnNumber: pos.column,
           startIndex: context.startIndex,
           endIndex: context.endIndex,
           originalText: context.text,
@@ -103,10 +109,12 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
     redundantPhrases.forEach(({ pattern, suggestion }) => {
       let match;
       while ((match = pattern.exec(text)) !== null) {
+        const pos = getLineAndColumn(lineMap, match.index);
         suggestions.push({
           id: `suggestion-${id++}`,
           type: 'economy',
-          lineNumber: getLineNumber(text, match.index),
+          lineNumber: pos.line,
+          columnNumber: pos.column,
           startIndex: match.index,
           endIndex: match.index + match[0].length,
           originalText: match[0],
@@ -130,10 +138,12 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
       let match;
       while ((match = pattern.exec(text)) !== null) {
         const context = getContext(text, match.index, match[0].length);
+        const pos = getLineAndColumn(lineMap, context.startIndex);
         suggestions.push({
           id: `suggestion-${id++}`,
           type: 'grammar',
-          lineNumber: getLineNumber(text, context.startIndex),
+          lineNumber: pos.line,
+          columnNumber: pos.column,
           startIndex: context.startIndex,
           endIndex: context.endIndex,
           originalText: context.text,

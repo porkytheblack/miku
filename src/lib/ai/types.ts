@@ -183,6 +183,7 @@ export function parseHighlightToolCall(
       id,
       type: suggestionType,
       lineNumber,
+      columnNumber: startColumn,
       startIndex,
       endIndex,
       originalText,

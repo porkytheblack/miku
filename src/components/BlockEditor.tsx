@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useSettings } from '@/context/SettingsContext';
 import { HighlightType, Suggestion } from '@/types';
+import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPosition';
 import dynamic from 'next/dynamic';
 
 // Dynamically import markdown preview to avoid SSR issues
@@ -44,13 +45,16 @@ const SLASH_COMMANDS = [
 
 export default function BlockEditor() {
   const { settings } = useSettings();
-  const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions } = useMiku();
+  const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
   const [content, setContent] = useState<string>('');
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
+
+  // Track previous content for position adjustment
+  const prevContentRef = useRef<string>('');
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -104,15 +108,44 @@ export default function BlockEditor() {
     };
   }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext]);
 
-  // Clear suggestions when content changes significantly
+  // Adjust suggestion positions when content changes
   useEffect(() => {
-    if (state.suggestions.length > 0 && content !== lastReviewedContent) {
-      const significantChange = Math.abs(content.length - lastReviewedContent.length) > 20;
-      if (significantChange) {
-        clearSuggestions();
-      }
+    const prevContent = prevContentRef.current;
+    prevContentRef.current = content;
+
+    // Skip if no previous content or no suggestions
+    if (!prevContent || state.suggestions.length === 0 || prevContent === content) {
+      return;
     }
-  }, [content, lastReviewedContent, state.suggestions.length, clearSuggestions]);
+
+    // Check if the change is too drastic (more than 50% different length)
+    const lengthRatio = Math.min(content.length, prevContent.length) / Math.max(content.length, prevContent.length);
+    if (lengthRatio < 0.5) {
+      clearSuggestions();
+      return;
+    }
+
+    // Adjust suggestion positions based on the text edit
+    const adjustedSuggestions = adjustSuggestions(state.suggestions, prevContent, content);
+
+    // Validate that adjusted suggestions still point to correct text
+    const validatedSuggestions = validateSuggestionPositions(adjustedSuggestions, content);
+
+    // If we lost too many suggestions, clear them all (content changed too much)
+    if (validatedSuggestions.length < state.suggestions.length * 0.5) {
+      clearSuggestions();
+      return;
+    }
+
+    // Update suggestions if any changed
+    if (validatedSuggestions.length !== state.suggestions.length ||
+        validatedSuggestions.some((s, i) =>
+          s.startIndex !== state.suggestions[i]?.startIndex ||
+          s.endIndex !== state.suggestions[i]?.endIndex
+        )) {
+      updateSuggestions(validatedSuggestions);
+    }
+  }, [content, state.suggestions, clearSuggestions, updateSuggestions]);
 
   // Filtered slash commands
   const filteredCommands = useMemo(() => {
@@ -129,27 +162,44 @@ export default function BlockEditor() {
   }, [slashFilter]);
 
   // Build highlighted content with suggestion markers
+  // Uses validated positions to ensure highlights match the correct text
   const highlightedHTML = useMemo(() => {
     if (state.suggestions.length === 0 || !content) {
       return escapeHtml(content) + '\n';
     }
 
-    const sortedSuggestions = [...state.suggestions].sort((a, b) => a.startIndex - b.startIndex);
+    // Filter to only valid suggestions that match their expected text
+    const validSuggestions = state.suggestions.filter(suggestion => {
+      // Basic bounds checking
+      if (suggestion.startIndex < 0 || suggestion.endIndex > content.length || suggestion.startIndex >= suggestion.endIndex) {
+        return false;
+      }
+
+      // Verify the text at this position matches what we expect
+      const textAtPosition = content.slice(suggestion.startIndex, suggestion.endIndex);
+      if (textAtPosition !== suggestion.originalText) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const sortedSuggestions = [...validSuggestions].sort((a, b) => a.startIndex - b.startIndex);
     let html = '';
     let lastIndex = 0;
 
     for (const suggestion of sortedSuggestions) {
-      if (suggestion.startIndex < 0 || suggestion.endIndex > content.length || suggestion.startIndex >= suggestion.endIndex) {
-        continue;
-      }
+      // Skip overlapping suggestions
       if (suggestion.startIndex < lastIndex) {
         continue;
       }
 
+      // Add text before this highlight
       if (suggestion.startIndex > lastIndex) {
         html += escapeHtml(content.slice(lastIndex, suggestion.startIndex));
       }
 
+      // Add the highlighted text
       const highlightText = content.slice(suggestion.startIndex, suggestion.endIndex);
       const isActive = suggestion.id === state.activeSuggestionId;
       html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer; pointer-events: auto; ${isActive ? 'outline: 2px solid var(--accent-primary);' : ''}">${escapeHtml(highlightText)}</mark>`;
@@ -157,6 +207,7 @@ export default function BlockEditor() {
       lastIndex = suggestion.endIndex;
     }
 
+    // Add remaining text after last highlight
     if (lastIndex < content.length) {
       html += escapeHtml(content.slice(lastIndex));
     }

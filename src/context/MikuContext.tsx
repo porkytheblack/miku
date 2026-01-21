@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
-import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG, AggressivenessLevel } from '@/types';
+import { MikuState, AIProviderConfig, HighlightType, DEFAULT_AGENT_CONFIG, AggressivenessLevel, Suggestion } from '@/types';
 import { createMikuAgent, MikuAgent } from '@/lib/ai/agent';
 import { analyzeSuggestions } from '@/lib/analyzer';
 
@@ -30,6 +30,7 @@ interface MikuContextType {
   acceptSuggestion: (id: string) => string | null;
   dismissSuggestion: (id: string) => void;
   clearSuggestions: () => void;
+  updateSuggestions: (suggestions: Suggestion[]) => void;
   setAIConfig: (config: AIProviderConfig | null) => void;
   aiConfig: AIProviderConfig | null;
   isUsingDefaults: boolean;
@@ -225,6 +226,17 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const updateSuggestions = useCallback((suggestions: Suggestion[]) => {
+    setState(prev => ({
+      ...prev,
+      suggestions,
+      // Clear active suggestion if it no longer exists
+      activeSuggestionId: suggestions.some(s => s.id === prev.activeSuggestionId)
+        ? prev.activeSuggestionId
+        : null,
+    }));
+  }, []);
+
   return (
     <MikuContext.Provider
       value={{
@@ -234,6 +246,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         acceptSuggestion,
         dismissSuggestion,
         clearSuggestions,
+        updateSuggestions,
         setAIConfig,
         aiConfig,
         isUsingDefaults,

@@ -5,11 +5,12 @@ export type HighlightType = 'clarity' | 'grammar' | 'style' | 'structure' | 'eco
 export interface Suggestion {
   id: string;
   type: HighlightType;
-  lineNumber: number;
-  startIndex: number;
-  endIndex: number;
-  originalText: string;
-  observation: string;
+  lineNumber: number;    // 1-indexed line where suggestion starts
+  columnNumber: number;  // 1-indexed column where suggestion starts
+  startIndex: number;    // Character offset from start of document
+  endIndex: number;      // Character offset for end of highlighted text
+  originalText: string;  // The exact text being highlighted
+  observation: string;   // Why this is flagged
   suggestedRevision: string;
 }
 
