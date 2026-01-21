@@ -62,8 +62,8 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
         e.preventDefault();
         onToggleFileBrowser();
       }
-      // Cmd/Ctrl + H: Toggle help menu
-      if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+      // Cmd/Ctrl + ?: Toggle help menu (Cmd+Shift+/)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === '/') {
         e.preventDefault();
         setShowHelp(prev => !prev);
       }
@@ -388,7 +388,7 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
             onClick={() => setShowHelp(true)}
             className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
             aria-label="Help"
-            title="Keyboard shortcuts (Cmd+H)"
+            title="Keyboard shortcuts (Cmd+?)"
           >
             <svg
               width="16"
@@ -455,7 +455,7 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
       { keys: ['/'], description: 'Slash commands (at line start)' },
     ]},
     { category: 'View', items: [
-      { keys: ['Cmd', 'H'], description: 'Toggle help' },
+      { keys: ['Cmd', '?'], description: 'Toggle help' },
       { keys: ['Esc'], description: 'Close panel / Dismiss' },
     ]},
   ];
