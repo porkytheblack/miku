@@ -483,7 +483,7 @@ export default function BlockEditor() {
     // Don't reset lastReviewedContent - keep it so we don't re-review
   }, [content, state.suggestions, acceptSuggestion, updateSuggestions]);
 
-  // Undo the last accepted suggestion
+  // Undo the last accepted suggestion or rewrite
   const handleUndo = useCallback(() => {
     if (acceptedRevisions.length === 0) return;
 
@@ -657,8 +657,29 @@ export default function BlockEditor() {
         result.rewrittenText +
         content.slice(result.endIndex);
 
+      // Calculate the length difference for position adjustments
+      const lengthDiff = result.rewrittenText.length - (result.endIndex - result.startIndex);
+
       // Update reviewedContentRef to prevent auto-adjustment
       reviewedContentRef.current = newContent;
+
+      // Track this rewrite for undo, and update positions of previous revisions
+      setAcceptedRevisions(prev => {
+        // Update positions of previous revisions that come after this edit
+        const updated = prev.map(r => {
+          if (r.position > result.endIndex) {
+            return { ...r, position: r.position + lengthDiff };
+          }
+          return r;
+        });
+        // Add the new revision (use a unique id for rewrites)
+        return [...updated, {
+          id: `rewrite-${Date.now()}`,
+          originalText: selectedText,
+          revisedText: result.rewrittenText,
+          position: result.startIndex,
+        }];
+      });
 
       setContent(newContent);
 
