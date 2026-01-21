@@ -155,23 +155,7 @@ export function analyzeSuggestions(text: string, aggressiveness: AggressivenessL
   }
 
   // Remove duplicates based on overlapping ranges
-  const deduplicated = deduplicateSuggestions(suggestions);
-
-  // Debug logging
-  console.log('[Analyzer] Generated suggestions:', deduplicated.length);
-  deduplicated.forEach((s, i) => {
-    console.log(`[Analyzer] Suggestion ${i}:`, {
-      id: s.id,
-      type: s.type,
-      startIndex: s.startIndex,
-      endIndex: s.endIndex,
-      originalText: JSON.stringify(s.originalText),
-      textSlice: JSON.stringify(text.slice(s.startIndex, s.endIndex)),
-      matches: text.slice(s.startIndex, s.endIndex) === s.originalText,
-    });
-  });
-
-  return deduplicated;
+  return deduplicateSuggestions(suggestions);
 }
 
 function getContext(text: string, matchIndex: number, matchLength: number): { text: string; startIndex: number; endIndex: number } {

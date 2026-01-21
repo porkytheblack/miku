@@ -428,28 +428,16 @@ export function validateSuggestionPositions(
     const currentText = content.slice(suggestion.startIndex, suggestion.endIndex);
     const currentRange: OffsetRange = { start: suggestion.startIndex, end: suggestion.endIndex };
 
-    console.log(`[validatePositions] Checking ${suggestion.id}:`, {
-      originalText: JSON.stringify(suggestion.originalText),
-      currentText: JSON.stringify(currentText),
-      matches: currentText === suggestion.originalText,
-      startIndex: suggestion.startIndex,
-      endIndex: suggestion.endIndex,
-    });
-
     if (currentText === suggestion.originalText) {
       // Position is correct, but check for overlaps
       if (!hasOverlap(currentRange)) {
-        console.log(`[validatePositions] ${suggestion.id}: Position correct, adding`);
         validated.push(suggestion);
         usedRanges.push(currentRange);
-      } else {
-        console.log(`[validatePositions] ${suggestion.id}: Overlaps with existing, skipping`);
       }
       continue;
     }
 
     // Try to find the correct position
-    console.log(`[validatePositions] ${suggestion.id}: Position wrong, searching for correct position...`);
     const correctRange = findExactPosition(
       content,
       suggestion.originalText,
@@ -457,22 +445,15 @@ export function validateSuggestionPositions(
       suggestion.lineNumber
     );
 
-    if (correctRange) {
-      console.log(`[validatePositions] ${suggestion.id}: Found at`, correctRange);
-      if (!hasOverlap(correctRange)) {
-        const lineCol = lineMap.offsetToLineColumn(correctRange.start);
-        validated.push({
-          ...suggestion,
-          startIndex: correctRange.start,
-          endIndex: correctRange.end,
-          lineNumber: lineCol.line,
-        });
-        usedRanges.push(correctRange);
-      } else {
-        console.log(`[validatePositions] ${suggestion.id}: New position overlaps, skipping`);
-      }
-    } else {
-      console.log(`[validatePositions] ${suggestion.id}: Could not find text in content`);
+    if (correctRange && !hasOverlap(correctRange)) {
+      const lineCol = lineMap.offsetToLineColumn(correctRange.start);
+      validated.push({
+        ...suggestion,
+        startIndex: correctRange.start,
+        endIndex: correctRange.end,
+        lineNumber: lineCol.line,
+      });
+      usedRanges.push(correctRange);
     }
   }
 

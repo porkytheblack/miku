@@ -129,15 +129,9 @@ export default function BlockEditor() {
       return;
     }
 
-    console.log('[BlockEditor] Content changed since review, adjusting positions...', {
-      reviewedLength: reviewedContent.length,
-      currentLength: content.length,
-    });
-
     // Check if the change is too drastic (more than 50% different length)
     const lengthRatio = Math.min(content.length, reviewedContent.length) / Math.max(content.length, reviewedContent.length);
     if (lengthRatio < 0.5) {
-      console.log('[BlockEditor] Content changed too drastically, clearing suggestions');
       clearSuggestions();
       reviewedContentRef.current = content;
       return;
@@ -149,18 +143,11 @@ export default function BlockEditor() {
     // Validate that adjusted suggestions still point to correct text
     const validatedSuggestions = validateSuggestionPositions(adjustedSuggestions, content);
 
-    console.log('[BlockEditor] Adjusted suggestions:', {
-      before: state.suggestions.length,
-      afterAdjust: adjustedSuggestions.length,
-      afterValidate: validatedSuggestions.length,
-    });
-
     // Update the reviewed content ref first to prevent loops
     reviewedContentRef.current = content;
 
     // If we lost too many suggestions, clear them all (content changed too much)
     if (validatedSuggestions.length < state.suggestions.length * 0.5) {
-      console.log('[BlockEditor] Lost too many suggestions, clearing all');
       clearSuggestions();
       return;
     }
@@ -197,38 +184,8 @@ export default function BlockEditor() {
       return escapeHtml(content) + '\n';
     }
 
-    // Debug: log all suggestions
-    console.log('[BlockEditor] Total suggestions:', state.suggestions.length);
-    state.suggestions.forEach((s, i) => {
-      const textAtPosition = content.slice(s.startIndex, s.endIndex);
-      console.log(`[BlockEditor] Suggestion ${i}:`, {
-        id: s.id,
-        type: s.type,
-        startIndex: s.startIndex,
-        endIndex: s.endIndex,
-        originalText: JSON.stringify(s.originalText),
-        textAtPosition: JSON.stringify(textAtPosition),
-        matches: textAtPosition === s.originalText,
-        contentLength: content.length,
-      });
-    });
-
     // Validate and fix suggestion positions using the textPosition utilities
     const validSuggestions = validateSuggestionPositions(state.suggestions, content);
-
-    console.log('[BlockEditor] Valid suggestions after validation:', validSuggestions.length);
-
-    // Log any suggestions that were filtered out
-    if (validSuggestions.length < state.suggestions.length) {
-      const validIds = new Set(validSuggestions.map(s => s.id));
-      state.suggestions.filter(s => !validIds.has(s.id)).forEach(s => {
-        console.log(`[BlockEditor] Could not validate ${s.id}:`, {
-          originalText: JSON.stringify(s.originalText),
-          startIndex: s.startIndex,
-          endIndex: s.endIndex,
-        });
-      });
-    }
 
     const sortedSuggestions = [...validSuggestions].sort((a, b) => a.startIndex - b.startIndex);
     let html = '';

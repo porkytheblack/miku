@@ -180,20 +180,6 @@ export function parseHighlightToolCall(
 
     const endIndex = startIndex + (endColumn - startColumn);
 
-    // Debug logging
-    const fullText = documentLines.join('\n');
-    const textAtPosition = fullText.slice(startIndex, endIndex);
-    console.log('[AI parseHighlightToolCall]', {
-      lineNumber,
-      startColumn,
-      endColumn,
-      startIndex,
-      endIndex,
-      originalText: JSON.stringify(originalText),
-      textAtPosition: JSON.stringify(textAtPosition),
-      matches: textAtPosition === originalText,
-    });
-
     return {
       id,
       type: suggestionType,
