@@ -171,12 +171,15 @@ export default function BlockEditor() {
     };
   }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext, getContentForReview]);
 
-  // Adjust suggestion positions when content changes after a review
-  // Only run when content changes, not when suggestions change
+  // Adjust suggestion positions when content changes due to user typing (not accepting suggestions)
+  // This effect handles position drift when the user edits text while suggestions are visible
+  // Note: When accepting suggestions, handleAccept manages position updates directly
   useEffect(() => {
     const reviewedContent = reviewedContentRef.current;
 
-    // Skip if no reviewed content or content hasn't changed
+    // Skip if content matches the ref - this means either:
+    // 1. No review has happened yet
+    // 2. We just updated the ref (e.g., after accepting a suggestion)
     if (!reviewedContent || reviewedContent === content) {
       return;
     }
@@ -443,28 +446,40 @@ export default function BlockEditor() {
       position: startIndex,
     }]);
 
-    // Adjust remaining suggestions' positions and update in one go
-    // We must NOT call both updateSuggestions and acceptSuggestion separately
-    // because acceptSuggestion would overwrite the adjusted positions
-    const remainingSuggestions = state.suggestions.filter(s => s.id !== id);
-    if (remainingSuggestions.length > 0) {
-      const adjustedRemaining = adjustSuggestions(remainingSuggestions, content, newContent);
-      const validatedRemaining = validateSuggestionPositions(adjustedRemaining, newContent);
-      // Use updateSuggestions to set the adjusted remaining suggestions
-      // This replaces the entire suggestions array with the adjusted ones (without the accepted one)
-      updateSuggestions(validatedRemaining);
-    } else {
-      // No remaining suggestions - just clear them
-      clearSuggestions();
-    }
+    // Calculate the character delta (how much the text length changed)
+    const delta = suggestion.suggestedRevision.length - suggestion.originalText.length;
+
+    // Adjust remaining suggestions' positions with simple delta shift
+    // Suggestions BEFORE the accepted one stay the same
+    // Suggestions AFTER need their indices shifted by delta
+    const remainingSuggestions = state.suggestions
+      .filter(s => s.id !== id)
+      .map(s => {
+        // If this suggestion starts after the accepted one ends, shift its indices
+        if (s.startIndex >= endIndex) {
+          return {
+            ...s,
+            startIndex: s.startIndex + delta,
+            endIndex: s.endIndex + delta,
+          };
+        }
+        // Suggestions before the accepted one stay unchanged
+        return s;
+      });
 
     // Update the reviewed content ref to the new content
-    // This prevents the position adjustment effect from running unnecessarily
     reviewedContentRef.current = newContent;
 
+    // Update content first
     setContent(newContent);
     setLastReviewedContent('');
-    // Don't call acceptSuggestion here - we already handled everything above
+
+    // Update suggestions with adjusted positions (or clear if none left)
+    if (remainingSuggestions.length > 0) {
+      updateSuggestions(remainingSuggestions);
+    } else {
+      clearSuggestions();
+    }
     setActiveSuggestion(null);
   }, [content, state.suggestions, updateSuggestions, clearSuggestions, setActiveSuggestion]);
 
