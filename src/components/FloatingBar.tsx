@@ -16,6 +16,7 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showFileMenu, setShowFileMenu] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [inTauri, setInTauri] = useState(false);
@@ -61,13 +62,18 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
         e.preventDefault();
         onToggleFileBrowser();
       }
+      // Cmd/Ctrl + H: Toggle help menu
+      if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+        e.preventDefault();
+        setShowHelp(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [newDoc, openDocument, saveDocument, onToggleFileBrowser]);
 
-  const isVisible = isHovered || state.status !== 'idle' || showSettings || showFileMenu;
+  const isVisible = isHovered || state.status !== 'idle' || showSettings || showFileMenu || showHelp;
 
   const handleManualReview = useCallback(() => {
     const editor = window.document.querySelector('textarea');
@@ -370,6 +376,36 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.93 2.93l1.41 1.41M11.66 11.66l1.41 1.41M2.93 13.07l1.41-1.41M11.66 4.34l1.41-1.41" />
             </svg>
           </button>
+
+          {/* Divider */}
+          <div
+            className="w-px h-4"
+            style={{ background: 'var(--border-default)' }}
+          />
+
+          {/* Help button */}
+          <button
+            onClick={() => setShowHelp(true)}
+            className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
+            aria-label="Help"
+            title="Keyboard shortcuts (Cmd+H)"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -385,6 +421,160 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} />
       )}
+
+      {/* Help panel */}
+      {showHelp && (
+        <HelpPanel onClose={() => setShowHelp(false)} />
+      )}
+    </>
+  );
+}
+
+// Help panel component showing keyboard shortcuts
+function HelpPanel({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
+  const shortcuts = [
+    { category: 'File', items: [
+      { keys: ['Cmd', 'N'], description: 'New document' },
+      { keys: ['Cmd', 'O'], description: 'Open document' },
+      { keys: ['Cmd', 'S'], description: 'Save document' },
+      { keys: ['Cmd', 'B'], description: 'Toggle file browser' },
+    ]},
+    { category: 'Editing', items: [
+      { keys: ['Cmd', 'Enter'], description: 'Request AI review' },
+      { keys: ['Cmd', 'R'], description: 'Rewrite selected text' },
+      { keys: ['/'], description: 'Slash commands (at line start)' },
+    ]},
+    { category: 'View', items: [
+      { keys: ['Cmd', 'H'], description: 'Toggle help' },
+      { keys: ['Esc'], description: 'Close panel / Dismiss' },
+    ]},
+  ];
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[199]"
+        style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          maxWidth: '500px',
+          width: 'calc(100vw - 48px)',
+          maxHeight: 'calc(100vh - 100px)',
+          overflowY: 'auto',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '24px',
+          boxShadow: 'var(--shadow-lg)',
+          zIndex: 200,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Keyboard Shortcuts
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '4px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M1 1l12 12M13 1L1 13" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Shortcuts list */}
+        {shortcuts.map((section, sectionIndex) => (
+          <div key={section.category} style={{ marginBottom: sectionIndex < shortcuts.length - 1 ? '20px' : 0 }}>
+            <h3 style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--text-tertiary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: '8px',
+            }}>
+              {section.category}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {section.items.map((shortcut, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                    {shortcut.description}
+                  </span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {shortcut.keys.map((key, keyIndex) => (
+                      <kbd
+                        key={keyIndex}
+                        style={{
+                          padding: '2px 6px',
+                          background: 'var(--bg-primary)',
+                          border: '1px solid var(--border-default)',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontFamily: 'var(--font-mono)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        {key}
+                      </kbd>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Tip */}
+        <div style={{
+          marginTop: '20px',
+          padding: '12px',
+          background: 'var(--accent-subtle)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+        }}>
+          <strong style={{ color: 'var(--text-primary)' }}>Tip:</strong> Use Cmd+R to rewrite selected text with AI assistance.
+        </div>
+      </div>
     </>
   );
 }

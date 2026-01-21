@@ -7,6 +7,7 @@ import { useDocument } from '@/context/DocumentContext';
 import { HighlightType, Suggestion } from '@/types';
 import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPosition';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 
 // Dynamically import markdown preview to avoid SSR issues
 const MarkdownPreview = dynamic(() => import('@uiw/react-markdown-preview').then(mod => mod.default), {
@@ -560,19 +561,127 @@ export default function BlockEditor() {
     dismissSuggestion(id);
   }, [dismissSuggestion]);
 
-  // Listen for events from FloatingBar
+  // Accept all suggestions sequentially, adjusting positions as we go
+  const handleAcceptAll = useCallback(() => {
+    if (state.suggestions.length === 0) return;
+
+    // Sort suggestions by position (earliest first)
+    const sortedSuggestions = [...state.suggestions].sort((a, b) => a.startIndex - b.startIndex);
+
+    let currentContent = content;
+    let cumulativeOffset = 0;
+    const newAcceptedRevisions: AcceptedRevision[] = [];
+
+    for (const suggestion of sortedSuggestions) {
+      // Adjust position based on cumulative offset from previous accepts
+      const adjustedStartIndex = suggestion.startIndex + cumulativeOffset;
+      const adjustedEndIndex = suggestion.endIndex + cumulativeOffset;
+
+      // Verify the text is still there
+      const currentText = currentContent.slice(adjustedStartIndex, adjustedEndIndex);
+
+      let startIndex = adjustedStartIndex;
+      let endIndex = adjustedEndIndex;
+
+      if (currentText !== suggestion.originalText) {
+        // Try to find it
+        const foundIndex = currentContent.indexOf(suggestion.originalText);
+        if (foundIndex === -1) {
+          // Skip this suggestion
+          continue;
+        }
+        startIndex = foundIndex;
+        endIndex = foundIndex + suggestion.originalText.length;
+      }
+
+      // Apply the change
+      currentContent =
+        currentContent.slice(0, startIndex) +
+        suggestion.suggestedRevision +
+        currentContent.slice(endIndex);
+
+      // Track the length difference for future suggestions
+      const lengthDiff = suggestion.suggestedRevision.length - (endIndex - startIndex);
+      cumulativeOffset += lengthDiff;
+
+      // Track for undo
+      newAcceptedRevisions.push({
+        id: suggestion.id,
+        originalText: suggestion.originalText,
+        revisedText: suggestion.suggestedRevision,
+        position: startIndex,
+      });
+    }
+
+    // Update reviewedContentRef to prevent auto-adjustment
+    reviewedContentRef.current = currentContent;
+
+    // Clear all suggestions
+    clearSuggestions();
+
+    // Add all accepted revisions to history
+    setAcceptedRevisions(prev => [...prev, ...newAcceptedRevisions]);
+
+    setContent(currentContent);
+    setActiveSuggestion(null);
+  }, [content, state.suggestions, clearSuggestions, setActiveSuggestion]);
+
+  // Decline all suggestions
+  const handleDeclineAll = useCallback(() => {
+    clearSuggestions();
+    setActiveSuggestion(null);
+  }, [clearSuggestions, setActiveSuggestion]);
+
+  // Rewrite selected text with AI
+  const handleRewriteSelection = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    if (start === end) {
+      // No selection
+      return;
+    }
+
+    const selectedText = content.slice(start, end);
+
+    // Dispatch event to request a rewrite of the selected text
+    window.dispatchEvent(new CustomEvent('miku:rewriteSelection', {
+      detail: { text: selectedText, startIndex: start, endIndex: end }
+    }));
+  }, [content]);
+
+  // Listen for events from FloatingBar and keyboard shortcuts
   useEffect(() => {
     const handleUndoEvent = () => handleUndo();
     const handlePreviewToggle = () => setIsPreviewMode(prev => !prev);
+    const handleAcceptAllEvent = () => handleAcceptAll();
+    const handleDeclineAllEvent = () => handleDeclineAll();
+
+    // Keyboard shortcut for Cmd+R to rewrite selection
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault();
+        handleRewriteSelection();
+      }
+    };
 
     window.addEventListener('miku:undo', handleUndoEvent);
     window.addEventListener('miku:togglePreview', handlePreviewToggle);
+    window.addEventListener('miku:acceptAll', handleAcceptAllEvent);
+    window.addEventListener('miku:declineAll', handleDeclineAllEvent);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('miku:undo', handleUndoEvent);
       window.removeEventListener('miku:togglePreview', handlePreviewToggle);
+      window.removeEventListener('miku:acceptAll', handleAcceptAllEvent);
+      window.removeEventListener('miku:declineAll', handleDeclineAllEvent);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleUndo]);
+  }, [handleUndo, handleAcceptAll, handleDeclineAll, handleRewriteSelection]);
 
   // Emit state changes so FloatingBar can update
   useEffect(() => {
@@ -820,8 +929,11 @@ Tips:
       {activeSuggestion && (
         <SuggestionPanel
           suggestion={activeSuggestion}
+          suggestionCount={state.suggestions.length}
           onAccept={handleAccept}
           onDismiss={handleDismiss}
+          onAcceptAll={handleAcceptAll}
+          onDeclineAll={handleDeclineAll}
           onClose={() => setActiveSuggestion(null)}
         />
       )}
@@ -916,13 +1028,19 @@ Tips:
 // Suggestion panel component - appears above the floating bar
 function SuggestionPanel({
   suggestion,
+  suggestionCount,
   onAccept,
   onDismiss,
+  onAcceptAll,
+  onDeclineAll,
   onClose,
 }: {
   suggestion: Suggestion;
+  suggestionCount: number;
   onAccept: (id: string) => void;
   onDismiss: (id: string) => void;
+  onAcceptAll: () => void;
+  onDeclineAll: () => void;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -985,8 +1103,15 @@ function SuggestionPanel({
         zIndex: 200,
       }}
     >
-      {/* Header */}
+      {/* Header with Miku icon */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <Image
+          src="/brand/miku-colored.svg"
+          alt="Miku"
+          width={24}
+          height={24}
+          style={{ flexShrink: 0 }}
+        />
         <span
           style={{
             width: '8px',
@@ -998,6 +1123,9 @@ function SuggestionPanel({
         />
         <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '14px' }}>
           {typeLabels[suggestion.type]}
+        </span>
+        <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
+          ({suggestionCount} suggestion{suggestionCount !== 1 ? 's' : ''})
         </span>
         <button
           onClick={onClose}
@@ -1041,8 +1169,8 @@ function SuggestionPanel({
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: '8px' }}>
+      {/* Actions for this suggestion */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: suggestionCount > 1 ? '12px' : '0' }}>
         <button
           onClick={() => onAccept(suggestion.id)}
           style={{
@@ -1076,6 +1204,49 @@ function SuggestionPanel({
           Dismiss
         </button>
       </div>
+
+      {/* Bulk actions - only show if there are multiple suggestions */}
+      {suggestionCount > 1 && (
+        <div style={{
+          display: 'flex',
+          gap: '8px',
+          paddingTop: '12px',
+          borderTop: '1px solid var(--border-default)'
+        }}>
+          <button
+            onClick={onAcceptAll}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              background: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '13px',
+            }}
+          >
+            Accept All ({suggestionCount})
+          </button>
+          <button
+            onClick={onDeclineAll}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              background: 'transparent',
+              color: 'var(--text-tertiary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '13px',
+            }}
+          >
+            Decline All
+          </button>
+        </div>
+      )}
     </div>
   );
 }
