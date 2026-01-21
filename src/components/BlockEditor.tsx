@@ -338,6 +338,17 @@ export default function BlockEditor() {
           rewrittenText +
           content.slice(selectionEnd);
 
+        // Track this rewrite for undo (same structure as accepted suggestions)
+        setAcceptedRevisions(prev => [...prev, {
+          id: `rewrite-${Date.now()}`,
+          originalText: selectedText,
+          revisedText: rewrittenText,
+          position: selectionStart,
+        }]);
+
+        // Clear redo stack since we made a new change
+        setRedoStack([]);
+
         setContent(newContent);
 
         // Adjust suggestion positions if any
