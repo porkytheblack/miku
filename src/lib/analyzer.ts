@@ -176,8 +176,18 @@ function getContext(text: string, matchIndex: number, matchLength: number): { te
     endIndex++;
   }
 
+  // Trim leading whitespace and adjust startIndex
+  while (startIndex < endIndex && /\s/.test(text[startIndex])) {
+    startIndex++;
+  }
+
+  // Trim trailing whitespace and adjust endIndex
+  while (endIndex > startIndex && /\s/.test(text[endIndex - 1])) {
+    endIndex--;
+  }
+
   return {
-    text: text.slice(startIndex, endIndex).trim(),
+    text: text.slice(startIndex, endIndex),
     startIndex,
     endIndex,
   };
