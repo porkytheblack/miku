@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  /* Color tokens from Miku design system - Dark mode */
+  --color-bg-primary: #1C1917;
+  --color-bg-secondary: #292524;
+  --color-bg-tertiary: #44403C;
+
+  --color-text-primary: #FAFAF9;
+  --color-text-secondary: #A8A29E;
+  --color-text-tertiary: #78716C;
+
+  --color-accent-primary: #E89B7D;
+  --color-accent-subtle: #2D2420;
+
+  --color-border-default: #44403C;
+  --color-border-focus: #E89B7D;
+
+  /* Highlight colors */
+  --color-highlight-yellow: rgba(234, 179, 8, 0.35);
+  --color-highlight-blue: rgba(59, 130, 246, 0.35);
+
+  /* Fonts */
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* Custom underline animation for hero */
+.underline-animate {
+  background-image: linear-gradient(var(--color-accent-primary), var(--color-accent-primary));
+  background-size: 100% 3px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+}
+
+/* Code block styling */
+.code-block {
+  font-family: var(--font-mono);
+}
+
+/* Highlight styles */
+.highlight-yellow {
+  background-color: var(--color-highlight-yellow);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.highlight-blue {
+  background-color: var(--color-highlight-blue);
+  border-radius: 2px;
+  padding: 0 2px;
+}
