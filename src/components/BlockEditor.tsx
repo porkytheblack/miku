@@ -443,10 +443,23 @@ export default function BlockEditor() {
       position: startIndex,
     }]);
 
+    // Adjust remaining suggestions' positions BEFORE updating content
+    // This prevents the useEffect from trying to re-adjust with stale reference
+    const remainingSuggestions = state.suggestions.filter(s => s.id !== id);
+    if (remainingSuggestions.length > 0) {
+      const adjustedRemaining = adjustSuggestions(remainingSuggestions, content, newContent);
+      const validatedRemaining = validateSuggestionPositions(adjustedRemaining, newContent);
+      updateSuggestions(validatedRemaining);
+    }
+
+    // Update the reviewed content ref to the new content
+    // This prevents the position adjustment effect from running unnecessarily
+    reviewedContentRef.current = newContent;
+
     setContent(newContent);
     setLastReviewedContent('');
     acceptSuggestion(id);
-  }, [content, state.suggestions, acceptSuggestion]);
+  }, [content, state.suggestions, acceptSuggestion, updateSuggestions]);
 
   // Undo the last accepted suggestion
   const handleUndo = useCallback(() => {
