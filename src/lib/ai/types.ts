@@ -171,6 +171,7 @@ export function parseHighlightToolCall(
     const suggestedRevision = args.suggested_revision as string;
 
     // Calculate absolute indices
+    // lineNumber is 1-indexed, startColumn is 0-indexed
     let startIndex = 0;
     for (let i = 0; i < lineNumber - 1 && i < documentLines.length; i++) {
       startIndex += documentLines[i].length + 1; // +1 for newline
@@ -178,6 +179,20 @@ export function parseHighlightToolCall(
     startIndex += startColumn;
 
     const endIndex = startIndex + (endColumn - startColumn);
+
+    // Debug logging
+    const fullText = documentLines.join('\n');
+    const textAtPosition = fullText.slice(startIndex, endIndex);
+    console.log('[AI parseHighlightToolCall]', {
+      lineNumber,
+      startColumn,
+      endColumn,
+      startIndex,
+      endIndex,
+      originalText: JSON.stringify(originalText),
+      textAtPosition: JSON.stringify(textAtPosition),
+      matches: textAtPosition === originalText,
+    });
 
     return {
       id,

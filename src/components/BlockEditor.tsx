@@ -168,21 +168,48 @@ export default function BlockEditor() {
       return escapeHtml(content) + '\n';
     }
 
+    // Debug: log all suggestions
+    console.log('[BlockEditor] Total suggestions:', state.suggestions.length);
+    state.suggestions.forEach((s, i) => {
+      const textAtPosition = content.slice(s.startIndex, s.endIndex);
+      console.log(`[BlockEditor] Suggestion ${i}:`, {
+        id: s.id,
+        type: s.type,
+        startIndex: s.startIndex,
+        endIndex: s.endIndex,
+        originalText: JSON.stringify(s.originalText),
+        textAtPosition: JSON.stringify(textAtPosition),
+        matches: textAtPosition === s.originalText,
+        contentLength: content.length,
+      });
+    });
+
     // Filter to only valid suggestions that match their expected text
     const validSuggestions = state.suggestions.filter(suggestion => {
       // Basic bounds checking
       if (suggestion.startIndex < 0 || suggestion.endIndex > content.length || suggestion.startIndex >= suggestion.endIndex) {
+        console.log(`[BlockEditor] Rejected ${suggestion.id}: bounds check failed`, {
+          startIndex: suggestion.startIndex,
+          endIndex: suggestion.endIndex,
+          contentLength: content.length,
+        });
         return false;
       }
 
       // Verify the text at this position matches what we expect
       const textAtPosition = content.slice(suggestion.startIndex, suggestion.endIndex);
       if (textAtPosition !== suggestion.originalText) {
+        console.log(`[BlockEditor] Rejected ${suggestion.id}: text mismatch`, {
+          expected: JSON.stringify(suggestion.originalText),
+          actual: JSON.stringify(textAtPosition),
+        });
         return false;
       }
 
       return true;
     });
+
+    console.log('[BlockEditor] Valid suggestions after filtering:', validSuggestions.length);
 
     const sortedSuggestions = [...validSuggestions].sort((a, b) => a.startIndex - b.startIndex);
     let html = '';
