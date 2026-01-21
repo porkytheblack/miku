@@ -482,6 +482,29 @@ export default function BlockEditor() {
       return;
     }
 
+    // Calculate the length difference (opposite direction of accept)
+    // When undoing: originalText replaces revisedText
+    const lengthDiff = lastRevision.originalText.length - lastRevision.revisedText.length;
+    const endOfRevisedText = foundIndex + lastRevision.revisedText.length;
+
+    // Update remaining suggestions' positions
+    const adjustedSuggestions = state.suggestions.map(s => {
+      // If the suggestion is after the undo position, shift its position
+      if (s.startIndex >= endOfRevisedText) {
+        return {
+          ...s,
+          startIndex: s.startIndex + lengthDiff,
+          endIndex: s.endIndex + lengthDiff,
+        };
+      }
+      return s;
+    });
+
+    // Update suggestions in context with adjusted positions
+    if (state.suggestions.length > 0) {
+      updateSuggestions(adjustedSuggestions);
+    }
+
     // Replace the revised text with the original
     const newContent =
       content.slice(0, foundIndex) +
@@ -491,7 +514,7 @@ export default function BlockEditor() {
     setContent(newContent);
     setAcceptedRevisions(prev => prev.slice(0, -1));
     setLastReviewedContent('');
-  }, [content, acceptedRevisions]);
+  }, [content, acceptedRevisions, state.suggestions, updateSuggestions]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
