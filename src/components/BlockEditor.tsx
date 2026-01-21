@@ -435,6 +435,27 @@ export default function BlockEditor() {
       suggestion.suggestedRevision +
       content.slice(endIndex);
 
+    // Calculate the offset change
+    const lengthDiff = suggestion.suggestedRevision.length - (endIndex - startIndex);
+
+    // Update remaining suggestions' positions
+    const remainingSuggestions = state.suggestions
+      .filter(s => s.id !== id)
+      .map(s => {
+        // If the suggestion is after the accepted one, shift its position
+        if (s.startIndex > endIndex) {
+          return {
+            ...s,
+            startIndex: s.startIndex + lengthDiff,
+            endIndex: s.endIndex + lengthDiff,
+          };
+        }
+        return s;
+      });
+
+    // Update suggestions in context (don't remove all, just update positions)
+    updateSuggestions(remainingSuggestions);
+
     // Track this revision for undo
     setAcceptedRevisions(prev => [...prev, {
       id: suggestion.id,
@@ -444,9 +465,8 @@ export default function BlockEditor() {
     }]);
 
     setContent(newContent);
-    setLastReviewedContent('');
-    acceptSuggestion(id);
-  }, [content, state.suggestions, acceptSuggestion]);
+    // Don't reset lastReviewedContent - keep it so we don't re-review
+  }, [content, state.suggestions, acceptSuggestion, updateSuggestions]);
 
   // Undo the last accepted suggestion
   const handleUndo = useCallback(() => {
@@ -516,6 +536,7 @@ export default function BlockEditor() {
     overflowWrap: 'break-word',
     margin: 0,
     padding: 0,
+    paddingBottom: '120px', // Extra space at bottom for floating bar
     border: 'none',
     boxSizing: 'border-box',
     letterSpacing: 'normal',
