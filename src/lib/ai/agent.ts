@@ -192,10 +192,40 @@ export class MikuAgent {
       }
     }
 
+    // Filter out overlapping suggestions - keep only the first suggestion for each text range
+    const filteredSuggestions = this.filterOverlappingSuggestions(suggestions);
+
     return {
-      suggestions,
+      suggestions: filteredSuggestions,
       summary,
     };
+  }
+
+  /**
+   * Filter out overlapping suggestions, keeping only the first one for each text range
+   */
+  private filterOverlappingSuggestions(suggestions: Suggestion[]): Suggestion[] {
+    if (suggestions.length <= 1) return suggestions;
+
+    // Sort by startIndex
+    const sorted = [...suggestions].sort((a, b) => a.startIndex - b.startIndex);
+    const result: Suggestion[] = [];
+
+    for (const suggestion of sorted) {
+      // Check if this suggestion overlaps with any already accepted suggestion
+      const hasOverlap = result.some(
+        existing =>
+          (suggestion.startIndex >= existing.startIndex && suggestion.startIndex < existing.endIndex) ||
+          (suggestion.endIndex > existing.startIndex && suggestion.endIndex <= existing.endIndex) ||
+          (suggestion.startIndex <= existing.startIndex && suggestion.endIndex >= existing.endIndex)
+      );
+
+      if (!hasOverlap) {
+        result.push(suggestion);
+      }
+    }
+
+    return result;
   }
 }
 

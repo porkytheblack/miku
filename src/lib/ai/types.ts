@@ -153,7 +153,9 @@ Guidelines:
 - Preserve the writer's unique voice and style
 - If the writing is good, acknowledge that - not everything needs fixing
 - Be specific in your observations - explain why something could be improved
-- Make your suggested revisions natural and fitting with the surrounding text`;
+- Make your suggested revisions natural and fitting with the surrounding text
+- IMPORTANT: Never provide overlapping suggestions. Each piece of text should only have ONE suggestion. If you want to suggest multiple improvements to the same text, combine them into a single suggestion.
+- If a section of text has multiple issues, create ONE suggestion that addresses all of them together in the suggested_revision`;
 
 // Parse tool call arguments into a Suggestion
 export function parseHighlightToolCall(

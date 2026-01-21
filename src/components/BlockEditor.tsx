@@ -353,10 +353,29 @@ export default function BlockEditor() {
     const suggestion = state.suggestions.find(s => s.id === id);
     if (!suggestion) return;
 
+    // Validate the position first - the stored position might be outdated
+    const currentText = content.slice(suggestion.startIndex, suggestion.endIndex);
+
+    let startIndex = suggestion.startIndex;
+    let endIndex = suggestion.endIndex;
+
+    // If position is wrong, find the correct position
+    if (currentText !== suggestion.originalText) {
+      // Search for the original text in the content
+      const foundIndex = content.indexOf(suggestion.originalText);
+      if (foundIndex === -1) {
+        // Can't find the text anymore - just dismiss the suggestion
+        acceptSuggestion(id);
+        return;
+      }
+      startIndex = foundIndex;
+      endIndex = foundIndex + suggestion.originalText.length;
+    }
+
     const newContent =
-      content.slice(0, suggestion.startIndex) +
+      content.slice(0, startIndex) +
       suggestion.suggestedRevision +
-      content.slice(suggestion.endIndex);
+      content.slice(endIndex);
 
     setContent(newContent);
     setLastReviewedContent('');
