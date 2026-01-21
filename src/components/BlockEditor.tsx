@@ -43,12 +43,18 @@ const SLASH_COMMANDS = [
   { id: 'divider', label: 'Divider', icon: '—', prefix: '---\n' },
 ];
 
-// Track accepted revisions for undo and to exclude from future reviews
+// Track accepted revisions for undo/redo and to exclude from future reviews
 interface AcceptedRevision {
   id: string;
   originalText: string;
   revisedText: string;
   position: number; // Position in document when accepted
+}
+
+// History entry for undo/redo stack
+interface HistoryEntry {
+  content: string;
+  revision?: AcceptedRevision;
 }
 
 export default function BlockEditor() {
@@ -68,13 +74,24 @@ export default function BlockEditor() {
   // Track accepted revisions for undo functionality
   const [acceptedRevisions, setAcceptedRevisions] = useState<AcceptedRevision[]>([]);
 
-  // Expose preview mode and undo to parent (FloatingBar)
-  const [canUndo, setCanUndo] = useState(false);
+  // Redo stack for redo functionality
+  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
 
-  // Update canUndo when acceptedRevisions changes
+  // Current note ID for saving
+  const [noteId, setNoteId] = useState<string | null>(null);
+
+  // Expose preview mode, undo, and redo to parent (FloatingBar)
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Update canUndo and canRedo when stacks change
   useEffect(() => {
     setCanUndo(acceptedRevisions.length > 0);
   }, [acceptedRevisions]);
+
+  useEffect(() => {
+    setCanRedo(redoStack.length > 0);
+  }, [redoStack]);
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -451,10 +468,45 @@ export default function BlockEditor() {
       lastRevision.originalText +
       content.slice(foundIndex + lastRevision.revisedText.length);
 
+    // Push to redo stack before changing state
+    setRedoStack(prev => [...prev, { content, revision: lastRevision }]);
+
     setContent(newContent);
     setAcceptedRevisions(prev => prev.slice(0, -1));
     setLastReviewedContent('');
   }, [content, acceptedRevisions]);
+
+  // Redo the last undone action
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+
+    const lastEntry = redoStack[redoStack.length - 1];
+    if (!lastEntry.revision) {
+      setRedoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Find the original text in the current content
+    const foundIndex = content.indexOf(lastEntry.revision.originalText);
+    if (foundIndex === -1) {
+      // Can't find the original text - just remove from redo stack
+      setRedoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
+    // Replace the original text with the revision
+    const newContent =
+      content.slice(0, foundIndex) +
+      lastEntry.revision.revisedText +
+      content.slice(foundIndex + lastEntry.revision.originalText.length);
+
+    // Add back to accepted revisions
+    setAcceptedRevisions(prev => [...prev, lastEntry.revision!]);
+
+    setContent(newContent);
+    setRedoStack(prev => prev.slice(0, -1));
+    setLastReviewedContent('');
+  }, [content, redoStack]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
@@ -463,23 +515,54 @@ export default function BlockEditor() {
   // Listen for events from FloatingBar
   useEffect(() => {
     const handleUndoEvent = () => handleUndo();
+    const handleRedoEvent = () => handleRedo();
     const handlePreviewToggle = () => setIsPreviewMode(prev => !prev);
 
+    const handleLoadNote = (e: CustomEvent<{ content: string; title: string; noteId: string }>) => {
+      setContent(e.detail.content);
+      setNoteId(e.detail.noteId);
+      setAcceptedRevisions([]);
+      setRedoStack([]);
+      clearSuggestions();
+      setLastReviewedContent('');
+    };
+
+    const handleNewNote = () => {
+      setContent('');
+      setNoteId(null);
+      setAcceptedRevisions([]);
+      setRedoStack([]);
+      clearSuggestions();
+      setLastReviewedContent('');
+    };
+
+    const handleNoteCreated = (e: CustomEvent<{ noteId: string }>) => {
+      setNoteId(e.detail.noteId);
+    };
+
     window.addEventListener('miku:undo', handleUndoEvent);
+    window.addEventListener('miku:redo', handleRedoEvent);
     window.addEventListener('miku:togglePreview', handlePreviewToggle);
+    window.addEventListener('miku:loadNote', handleLoadNote as EventListener);
+    window.addEventListener('miku:newNote', handleNewNote);
+    window.addEventListener('miku:noteCreated', handleNoteCreated as EventListener);
 
     return () => {
       window.removeEventListener('miku:undo', handleUndoEvent);
+      window.removeEventListener('miku:redo', handleRedoEvent);
       window.removeEventListener('miku:togglePreview', handlePreviewToggle);
+      window.removeEventListener('miku:loadNote', handleLoadNote as EventListener);
+      window.removeEventListener('miku:newNote', handleNewNote);
+      window.removeEventListener('miku:noteCreated', handleNoteCreated as EventListener);
     };
-  }, [handleUndo]);
+  }, [handleUndo, handleRedo, clearSuggestions]);
 
   // Emit state changes so FloatingBar can update
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('miku:editorState', {
-      detail: { canUndo, isPreviewMode }
+      detail: { canUndo, canRedo, isPreviewMode, noteId }
     }));
-  }, [canUndo, isPreviewMode]);
+  }, [canUndo, canRedo, isPreviewMode, noteId]);
 
   const activeSuggestion = state.suggestions.find(s => s.id === state.activeSuggestionId);
 
