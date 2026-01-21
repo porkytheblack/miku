@@ -2,28 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Suggestion } from '@/types';
-
-// Check if Clerk is configured
-const isClerkConfigured = typeof window === 'undefined'
-  ? !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  : !!(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-
-// Conditionally import Clerk - this will be tree-shaken if not used
-let useUserHook: () => { isSignedIn: boolean; isLoaded: boolean } = () => ({
-  isSignedIn: false,
-  isLoaded: true,
-});
-
-// Dynamic import for Clerk hooks
-if (isClerkConfigured) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const clerk = require('@clerk/nextjs');
-    useUserHook = clerk.useUser;
-  } catch {
-    // Clerk not available, use default
-  }
-}
+import { useAuth } from '@/components/AuthProvider';
 
 export interface Note {
   id: string;
@@ -60,7 +39,7 @@ interface NotesContextType {
 const NotesContext = createContext<NotesContextType | undefined>(undefined);
 
 export function NotesProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useUserHook();
+  const { isSignedIn } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNote, setCurrentNote] = useState<NoteWithHistory | null>(null);
   const [isLoading, setIsLoading] = useState(false);

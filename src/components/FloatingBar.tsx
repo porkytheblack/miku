@@ -3,33 +3,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useNotes } from '@/context/NotesContext';
+import { useAuth } from '@/components/AuthProvider';
 import SettingsPanel from './SettingsPanel';
 import NotesModal from './NotesModal';
-
-// Check if Clerk is configured
-const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-// Conditionally import Clerk components
-let useUser: () => { isSignedIn: boolean } = () => ({ isSignedIn: false });
-let SignInButton: React.FC<{ mode?: string; children: React.ReactNode }> | null = null;
-let UserButton: React.FC<{ appearance?: Record<string, unknown> }> | null = null;
-
-if (isClerkConfigured) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const clerk = require('@clerk/nextjs');
-    useUser = clerk.useUser;
-    SignInButton = clerk.SignInButton;
-    UserButton = clerk.UserButton;
-  } catch {
-    // Clerk not available
-  }
-}
+import ClerkButtons from './ClerkButtons';
 
 export default function FloatingBar() {
   const { state, requestReview } = useMiku();
   const { createNote, updateNote } = useNotes();
-  const { isSignedIn } = useUser();
+  const { isSignedIn } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -184,60 +166,7 @@ export default function FloatingBar() {
           }}
         >
           {/* User button / Sign in */}
-          {isClerkConfigured && isSignedIn && UserButton ? (
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: 'w-6 h-6',
-                },
-              }}
-            />
-          ) : isClerkConfigured && !isSignedIn && SignInButton ? (
-            <SignInButton mode="modal">
-              <button
-                className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
-                aria-label="Sign in"
-                title="Sign in to save notes"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </button>
-            </SignInButton>
-          ) : (
-            <button
-              className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
-              aria-label="Auth disabled"
-              title="Authentication not configured"
-              disabled
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}
-              >
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </button>
-          )}
+          <ClerkButtons isSignedIn={isSignedIn} />
 
           <Divider />
 

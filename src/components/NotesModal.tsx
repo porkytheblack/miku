@@ -2,22 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNotes, Note } from '@/context/NotesContext';
-
-// Check if Clerk is configured
-const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-// Conditionally use Clerk hook
-let useUser: () => { isSignedIn: boolean } = () => ({ isSignedIn: false });
-
-if (isClerkConfigured) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const clerk = require('@clerk/nextjs');
-    useUser = clerk.useUser;
-  } catch {
-    // Clerk not available
-  }
-}
+import { useAuth } from '@/components/AuthProvider';
 
 interface NotesModalProps {
   isOpen: boolean;
@@ -27,7 +12,7 @@ interface NotesModalProps {
 
 export default function NotesModal({ isOpen, onClose, onLoadNote }: NotesModalProps) {
   const { notes, isLoading, fetchNotes, deleteNote, loadNote } = useNotes();
-  const { isSignedIn } = useUser();
+  const { isSignedIn } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const modalRef = useRef<HTMLDivElement>(null);

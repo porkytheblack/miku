@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Inter } from "next/font/google";
 import "./globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { MikuProvider } from "@/context/MikuContext";
 import { NotesProvider } from "@/context/NotesContext";
+import { AuthProvider } from "@/components/AuthProvider";
+import dynamic from "next/dynamic";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -24,16 +25,34 @@ export const metadata: Metadata = {
 // Check if Clerk is configured
 const isClerkConfigured = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+// Dynamically import Clerk components only when configured
+const ClerkProvider = isClerkConfigured
+  ? dynamic(() => import("@clerk/nextjs").then((mod) => mod.ClerkProvider), { ssr: true })
+  : null;
+
+const ClerkAuthBridge = isClerkConfigured
+  ? dynamic(() => import("@/components/ClerkAuthBridge").then((mod) => mod.ClerkAuthBridge), { ssr: true })
+  : null;
+
 function Providers({ children }: { children: React.ReactNode }) {
-  return (
+  const content = (
     <SettingsProvider>
       <MikuProvider>
-        <NotesProvider>
-          {children}
-        </NotesProvider>
+        <AuthProvider>
+          <NotesProvider>
+            {children}
+          </NotesProvider>
+        </AuthProvider>
       </MikuProvider>
     </SettingsProvider>
   );
+
+  // When Clerk is configured, wrap with ClerkAuthBridge to sync auth state
+  if (ClerkAuthBridge) {
+    return <ClerkAuthBridge>{content}</ClerkAuthBridge>;
+  }
+
+  return content;
 }
 
 export default function RootLayout({
@@ -50,7 +69,7 @@ export default function RootLayout({
   );
 
   // Only wrap with ClerkProvider if Clerk is configured
-  if (isClerkConfigured) {
+  if (ClerkProvider) {
     return <ClerkProvider>{content}</ClerkProvider>;
   }
 
