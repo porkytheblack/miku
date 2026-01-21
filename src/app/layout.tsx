@@ -35,25 +35,32 @@ const ClerkAuthBridge = isClerkConfigured
   : null;
 
 function Providers({ children }: { children: React.ReactNode }) {
-  // AuthProvider must wrap MikuProvider so that MikuContext can access auth state
-  const content = (
-    <SettingsProvider>
-      <AuthProvider>
-        <MikuProvider>
-          <NotesProvider>
-            {children}
-          </NotesProvider>
-        </MikuProvider>
-      </AuthProvider>
-    </SettingsProvider>
+  // Core providers that don't depend on auth
+  const coreContent = (
+    <MikuProvider>
+      <NotesProvider>
+        {children}
+      </NotesProvider>
+    </MikuProvider>
   );
 
-  // When Clerk is configured, wrap with ClerkAuthBridge to sync auth state
-  if (ClerkAuthBridge) {
-    return <ClerkAuthBridge>{content}</ClerkAuthBridge>;
-  }
+  // When Clerk is configured, ClerkAuthBridge provides the AuthContext
+  // Otherwise, AuthProvider provides default (non-authenticated) context
+  const withAuth = ClerkAuthBridge ? (
+    <ClerkAuthBridge>
+      {coreContent}
+    </ClerkAuthBridge>
+  ) : (
+    <AuthProvider>
+      {coreContent}
+    </AuthProvider>
+  );
 
-  return content;
+  return (
+    <SettingsProvider>
+      {withAuth}
+    </SettingsProvider>
+  );
 }
 
 export default function RootLayout({
