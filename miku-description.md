@@ -99,3 +99,44 @@ You keep writing. Miku keeps waiting.
 ## Summary
 
 Miku is a markdown editor that treats AI as a tool, not a collaborator. It gives you a calm, minimal writing environment and an editor who knows when to stay quiet. Your words come first—always.
+
+---
+
+## Download
+
+Download Miku from the [GitHub releases page](https://github.com/porkytheblack/miku/releases/latest).
+
+- **macOS**: `.dmg` for Intel and Apple Silicon
+- **Windows**: `.msi` installer
+- **Linux**: AppImage and `.deb` packages
+
+---
+
+## Landing Page
+
+The Miku landing page is a separate Next.js application located in the `/landing` directory.
+
+### Development
+
+```bash
+cd landing
+npm install
+npm run dev
+```
+
+### Build
+
+```bash
+cd landing
+npm run build
+```
+
+The landing page exports as static HTML to the `out/` directory, ready for deployment to any static hosting service.
+
+### Features
+
+- Hero section with animated demo
+- Feature cards highlighting Miku's philosophy
+- Download links to latest GitHub release
+- GitHub star button
+- Responsive design with dark mode
