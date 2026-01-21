@@ -6,7 +6,11 @@ import { useDocument } from '@/context/DocumentContext';
 import { isTauri } from '@/lib/tauri';
 import SettingsPanel from './SettingsPanel';
 
-export default function FloatingBar() {
+interface FloatingBarProps {
+  onToggleFileBrowser?: () => void;
+}
+
+export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
   const { state, requestReview } = useMiku();
   const { document, openDocument, saveDocument, newDoc } = useDocument();
   const [isHovered, setIsHovered] = useState(false);
@@ -106,6 +110,38 @@ export default function FloatingBar() {
             height: '40px',
           }}
         >
+          {/* File browser button (only in Tauri) */}
+          {inTauri && onToggleFileBrowser && (
+            <>
+              <button
+                onClick={onToggleFileBrowser}
+                className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
+                aria-label="File browser"
+                title="Open file browser"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+              </button>
+
+              {/* Divider */}
+              <div
+                className="w-px h-4"
+                style={{ background: 'var(--border-default)' }}
+              />
+            </>
+          )}
+
           {/* File menu button (only in Tauri) */}
           {inTauri && (
             <>

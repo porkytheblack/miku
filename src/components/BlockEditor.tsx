@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useMiku } from '@/context/MikuContext';
 import { useSettings } from '@/context/SettingsContext';
+import { useDocument } from '@/context/DocumentContext';
 import { HighlightType, Suggestion } from '@/types';
 import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPosition';
 import dynamic from 'next/dynamic';
@@ -54,7 +55,23 @@ interface AcceptedRevision {
 export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
-  const [content, setContent] = useState<string>('');
+  const { document: docState, setContent: setDocContent } = useDocument();
+  const [content, setContentLocal] = useState<string>('');
+
+  // Sync content from DocumentContext when it changes (e.g., file opened)
+  useEffect(() => {
+    if (docState.content !== content) {
+      setContentLocal(docState.content);
+    }
+    // Only sync when document content changes externally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docState.content]);
+
+  // Wrapper to update both local and context state
+  const setContent = useCallback((newContent: string) => {
+    setContentLocal(newContent);
+    setDocContent(newContent);
+  }, [setDocContent]);
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);

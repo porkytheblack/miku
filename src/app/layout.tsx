@@ -4,6 +4,7 @@ import "./globals.css";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { MikuProvider } from "@/context/MikuContext";
 import { DocumentProvider } from "@/context/DocumentContext";
+import { WorkspaceProvider } from "@/context/WorkspaceContext";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -29,11 +30,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${jetbrainsMono.variable} ${inter.variable} antialiased`}>
         <SettingsProvider>
-          <DocumentProvider>
-            <MikuProvider>
-              {children}
-            </MikuProvider>
-          </DocumentProvider>
+          <WorkspaceProvider>
+            <DocumentProvider>
+              <MikuProvider>
+                {children}
+              </MikuProvider>
+            </DocumentProvider>
+          </WorkspaceProvider>
         </SettingsProvider>
       </body>
     </html>

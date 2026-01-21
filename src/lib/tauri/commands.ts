@@ -22,6 +22,18 @@ export interface Document {
   is_modified: boolean;
 }
 
+export interface Workspace {
+  path: string;
+  name: string;
+}
+
+export interface WorkspaceFile {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: WorkspaceFile[];
+}
+
 /**
  * Load settings from the app data directory
  */
@@ -126,4 +138,69 @@ export function toFrontendSettings(settings: EditorSettings): {
     aggressiveness: settings.aggressiveness as 'gentle' | 'balanced' | 'strict',
     writingContext: settings.writing_context,
   };
+}
+
+// ============ Workspace Commands ============
+
+/**
+ * Get workspace info from a path
+ */
+export async function getWorkspaceInfo(path: string): Promise<Workspace> {
+  return invoke<Workspace>('get_workspace_info', { path });
+}
+
+/**
+ * Get current workspace
+ */
+export async function getCurrentWorkspace(): Promise<Workspace | null> {
+  return invoke<Workspace | null>('get_current_workspace');
+}
+
+/**
+ * Set the current workspace
+ */
+export async function setWorkspace(path: string): Promise<void> {
+  return invoke('set_workspace', { path });
+}
+
+/**
+ * Get recent workspaces
+ */
+export async function getRecentWorkspaces(): Promise<Workspace[]> {
+  return invoke<Workspace[]>('get_recent_workspaces');
+}
+
+/**
+ * List files in a workspace
+ */
+export async function listWorkspaceFiles(workspacePath: string): Promise<WorkspaceFile[]> {
+  return invoke<WorkspaceFile[]>('list_workspace_files', { workspacePath });
+}
+
+/**
+ * Create a new file
+ */
+export async function createFile(basePath: string, name: string): Promise<string> {
+  return invoke<string>('create_file', { basePath, name });
+}
+
+/**
+ * Create a new folder
+ */
+export async function createFolder(basePath: string, name: string): Promise<string> {
+  return invoke<string>('create_folder', { basePath, name });
+}
+
+/**
+ * Delete a file or folder
+ */
+export async function deleteFile(path: string): Promise<void> {
+  return invoke('delete_file', { path });
+}
+
+/**
+ * Rename a file or folder
+ */
+export async function renameFile(oldPath: string, newName: string): Promise<string> {
+  return invoke<string>('rename_file', { oldPath, newName });
 }
