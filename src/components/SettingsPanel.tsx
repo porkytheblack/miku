@@ -1,13 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
-import { Theme, AIProvider, AI_MODELS, ReviewMode, AggressivenessLevel } from '@/types';
+import { Theme, AIProvider, AI_MODELS, OPENROUTER_MODELS, LOCAL_LLM_MODELS, AIModelOption, ReviewMode, AggressivenessLevel } from '@/types';
 
 interface SettingsPanelProps {
   onClose: () => void;
 }
+
+// Default base URLs for local providers
+const DEFAULT_BASE_URLS: Partial<Record<AIProvider, string>> = {
+  ollama: 'http://localhost:11434',
+  lmstudio: 'http://localhost:1234/v1',
+};
+
+// Provider display names
+const PROVIDER_NAMES: Record<AIProvider, string> = {
+  openrouter: 'OpenRouter',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
+};
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { settings, updateSettings } = useSettings();
@@ -19,21 +35,38 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     openai: '',
     anthropic: '',
     google: '',
+    openrouter: '',
+    ollama: '',
+    lmstudio: '',
   });
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>(
-    aiConfig?.provider || 'openai'
+    aiConfig?.provider || 'openrouter'
   );
   const [selectedModel, setSelectedModel] = useState<string>(
-    aiConfig?.model || 'gpt-4o'
+    aiConfig?.model || 'anthropic/claude-sonnet-4'
   );
+  const [baseUrl, setBaseUrl] = useState<string>(
+    aiConfig?.baseUrl || ''
+  );
+  const [customModel, setCustomModel] = useState<string>('');
+  const [localModels, setLocalModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
 
-  // Load saved API keys from localStorage on mount
+  // Load saved API keys and base URLs from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem('miku-api-keys');
       if (saved) {
         const parsed = JSON.parse(saved);
         setApiKeys(prev => ({ ...prev, ...parsed }));
+      }
+      const savedBaseUrls = localStorage.getItem('miku-base-urls');
+      if (savedBaseUrls) {
+        const parsed = JSON.parse(savedBaseUrls);
+        if (parsed[selectedProvider]) {
+          setBaseUrl(parsed[selectedProvider]);
+        }
       }
     } catch (e) {
       console.error('Failed to load API keys:', e);
@@ -62,35 +95,120 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     };
   }, [onClose]);
 
+  // Get models based on provider
+  const getModelsForProvider = useCallback((provider: AIProvider): AIModelOption[] => {
+    switch (provider) {
+      case 'openrouter':
+        return OPENROUTER_MODELS;
+      case 'ollama':
+      case 'lmstudio':
+        // For local LLMs, combine suggestions with fetched models
+        const localOptions: AIModelOption[] = localModels.map(m => ({
+          id: m,
+          name: m,
+          provider,
+          supportsTools: true,
+        }));
+        // Add suggestions if no local models loaded
+        if (localOptions.length === 0) {
+          return LOCAL_LLM_MODELS.map(m => ({ ...m, provider }));
+        }
+        return localOptions;
+      default:
+        return AI_MODELS.filter(m => m.provider === provider);
+    }
+  }, [localModels]);
+
   // Filter models by selected provider
-  const availableModels = AI_MODELS.filter(m => m.provider === selectedProvider);
+  const availableModels = getModelsForProvider(selectedProvider);
+
+  // Fetch models from local LLM server
+  const fetchLocalModels = useCallback(async () => {
+    const url = baseUrl || DEFAULT_BASE_URLS[selectedProvider] || '';
+    if (!url) return;
+
+    setIsLoadingModels(true);
+    setModelLoadError(null);
+
+    try {
+      let models: string[] = [];
+
+      if (selectedProvider === 'ollama') {
+        // Ollama uses /api/tags endpoint
+        const response = await fetch(`${url}/api/tags`);
+        if (!response.ok) throw new Error('Failed to connect to Ollama');
+        const data = await response.json();
+        models = data.models?.map((m: { name: string }) => m.name) || [];
+      } else if (selectedProvider === 'lmstudio') {
+        // LM Studio uses OpenAI-compatible /models endpoint
+        const response = await fetch(`${url}/models`);
+        if (!response.ok) throw new Error('Failed to connect to LM Studio');
+        const data = await response.json();
+        models = data.data?.map((m: { id: string }) => m.id) || [];
+      }
+
+      setLocalModels(models);
+      if (models.length > 0 && !models.includes(selectedModel)) {
+        setSelectedModel(models[0]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch local models:', error);
+      setModelLoadError(error instanceof Error ? error.message : 'Failed to connect');
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, [baseUrl, selectedProvider, selectedModel]);
 
   // Update selected model when provider changes
   useEffect(() => {
-    const currentModelProvider = AI_MODELS.find(m => m.id === selectedModel)?.provider;
-    if (currentModelProvider !== selectedProvider) {
-      const firstModel = availableModels[0];
-      if (firstModel) {
-        setSelectedModel(firstModel.id);
-      }
+    // Reset local models when switching providers
+    setLocalModels([]);
+    setModelLoadError(null);
+
+    // Set default base URL for local providers
+    if (selectedProvider === 'ollama' || selectedProvider === 'lmstudio') {
+      setBaseUrl(prev => prev || DEFAULT_BASE_URLS[selectedProvider] || '');
+    } else {
+      setBaseUrl('');
     }
-  }, [selectedProvider, selectedModel, availableModels]);
+
+    // Update selected model to first available for new provider
+    const models = getModelsForProvider(selectedProvider);
+    const currentModelInList = models.find(m => m.id === selectedModel);
+    if (!currentModelInList && models.length > 0) {
+      setSelectedModel(models[0].id);
+    }
+  }, [selectedProvider, getModelsForProvider]);
 
   const handleSaveAPIConfig = () => {
     const apiKey = apiKeys[selectedProvider];
-    if (apiKey) {
+    const isLocalProvider = selectedProvider === 'ollama' || selectedProvider === 'lmstudio';
+
+    // Local providers don't need API keys
+    if (apiKey || isLocalProvider) {
       // Save API keys to localStorage
       try {
         localStorage.setItem('miku-api-keys', JSON.stringify(apiKeys));
+        // Save base URLs for local providers
+        const savedBaseUrls = localStorage.getItem('miku-base-urls');
+        const baseUrls = savedBaseUrls ? JSON.parse(savedBaseUrls) : {};
+        if (baseUrl) {
+          baseUrls[selectedProvider] = baseUrl;
+        }
+        localStorage.setItem('miku-base-urls', JSON.stringify(baseUrls));
       } catch (e) {
         console.error('Failed to save API keys:', e);
       }
 
+      // Use custom model if specified, otherwise use selected
+      const modelToUse = customModel.trim() || selectedModel;
+
       // Set the AI config
       setAIConfig({
         provider: selectedProvider,
-        apiKey,
-        model: selectedModel,
+        apiKey: apiKey || '',
+        model: modelToUse,
+        baseUrl: baseUrl || undefined,
       });
     }
   };
@@ -101,6 +219,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   const currentApiKey = apiKeys[selectedProvider];
   const isConfigured = aiConfig !== null && aiConfig.provider === selectedProvider;
+  const isLocalProvider = selectedProvider === 'ollama' || selectedProvider === 'lmstudio';
+  const requiresApiKey = !isLocalProvider;
+
+  // Find model name for display
+  const findModelName = (modelId: string): string => {
+    const allModels = [...AI_MODELS, ...OPENROUTER_MODELS, ...LOCAL_LLM_MODELS];
+    return allModels.find(m => m.id === modelId)?.name || modelId;
+  };
 
   return (
     <div
@@ -181,25 +307,118 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               >
                 Provider
               </label>
-              <div className="flex gap-2">
-                {(['openai', 'anthropic', 'google'] as AIProvider[]).map(provider => (
+              {/* Cloud providers row */}
+              <div className="flex gap-2 mb-2">
+                {(['openrouter', 'openai', 'anthropic', 'google'] as AIProvider[]).map(provider => (
                   <button
                     key={provider}
                     onClick={() => setSelectedProvider(provider)}
-                    className="flex-1 py-2 px-3 rounded text-sm capitalize transition-colors"
+                    className="flex-1 py-2 px-2 rounded text-sm transition-colors"
                     style={{
                       background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
                       color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
                       borderRadius: 'var(--radius-sm)',
                       fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
+                      fontSize: '12px',
                     }}
                   >
-                    {provider === 'openai' ? 'OpenAI' : provider === 'anthropic' ? 'Anthropic' : 'Google'}
+                    {PROVIDER_NAMES[provider]}
+                  </button>
+                ))}
+              </div>
+              {/* Local LLM providers row */}
+              <div className="flex gap-2">
+                {(['ollama', 'lmstudio'] as AIProvider[]).map(provider => (
+                  <button
+                    key={provider}
+                    onClick={() => setSelectedProvider(provider)}
+                    className="flex-1 py-2 px-2 rounded text-sm transition-colors"
+                    style={{
+                      background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {PROVIDER_NAMES[provider]}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Base URL for local providers */}
+            {isLocalProvider && (
+              <div className="mb-4">
+                <label
+                  className="block mb-2"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  Server URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={baseUrl}
+                    onChange={e => setBaseUrl(e.target.value)}
+                    placeholder={DEFAULT_BASE_URLS[selectedProvider]}
+                    className="flex-1 p-2 rounded"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                  <button
+                    onClick={fetchLocalModels}
+                    disabled={isLoadingModels}
+                    className="px-3 py-2 rounded text-sm transition-colors"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                      cursor: isLoadingModels ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {isLoadingModels ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                {modelLoadError && (
+                  <p
+                    className="mt-1"
+                    style={{
+                      color: 'var(--text-error, #ef4444)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    {modelLoadError}
+                  </p>
+                )}
+                <p
+                  className="mt-1"
+                  style={{
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-xs)',
+                  }}
+                >
+                  {selectedProvider === 'ollama'
+                    ? 'Make sure Ollama is running locally.'
+                    : 'Make sure LM Studio server is running.'}
+                </p>
+              </div>
+            )}
 
             {/* Model selection */}
             <div className="mb-4">
@@ -232,60 +451,84 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   </option>
                 ))}
               </select>
+              {/* Custom model input for local providers */}
+              {isLocalProvider && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={customModel}
+                    onChange={e => setCustomModel(e.target.value)}
+                    placeholder="Or enter custom model name..."
+                    className="w-full p-2 rounded"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
-            {/* API Key input */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                API Key
-              </label>
-              <input
-                type="password"
-                value={currentApiKey}
-                onChange={e => setApiKeys(prev => ({ ...prev, [selectedProvider]: e.target.value }))}
-                placeholder={`Enter your ${selectedProvider === 'openai' ? 'OpenAI' : selectedProvider === 'anthropic' ? 'Anthropic' : 'Google'} API key`}
-                className="w-full p-2 rounded"
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              />
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                Your API key is stored locally and never sent to our servers.
-              </p>
-            </div>
+            {/* API Key input - only for cloud providers */}
+            {requiresApiKey && (
+              <div className="mb-4">
+                <label
+                  className="block mb-2"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={currentApiKey}
+                  onChange={e => setApiKeys(prev => ({ ...prev, [selectedProvider]: e.target.value }))}
+                  placeholder={`Enter your ${PROVIDER_NAMES[selectedProvider]} API key`}
+                  className="w-full p-2 rounded"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                />
+                <p
+                  className="mt-1"
+                  style={{
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-xs)',
+                  }}
+                >
+                  {selectedProvider === 'openrouter'
+                    ? 'Get your API key at openrouter.ai/keys'
+                    : 'Your API key is stored locally and never sent to our servers.'}
+                </p>
+              </div>
+            )}
 
             {/* Save/Clear buttons */}
             <div className="flex gap-2">
               <button
                 onClick={handleSaveAPIConfig}
-                disabled={!currentApiKey}
+                disabled={requiresApiKey && !currentApiKey}
                 className="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors"
                 style={{
-                  background: currentApiKey ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                  color: currentApiKey ? 'white' : 'var(--text-tertiary)',
+                  background: (!requiresApiKey || currentApiKey) ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: (!requiresApiKey || currentApiKey) ? 'white' : 'var(--text-tertiary)',
                   borderRadius: 'var(--radius-sm)',
                   fontFamily: 'var(--font-sans)',
                   fontSize: 'var(--text-sm)',
-                  cursor: currentApiKey ? 'pointer' : 'not-allowed',
+                  cursor: (!requiresApiKey || currentApiKey) ? 'pointer' : 'not-allowed',
                 }}
               >
                 {isConfigured ? 'Update' : 'Apply'}
@@ -328,7 +571,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                     fontSize: 'var(--text-sm)',
                   }}
                 >
-                  Using {AI_MODELS.find(m => m.id === aiConfig.model)?.name || aiConfig.model}
+                  Using {findModelName(aiConfig.model)} ({PROVIDER_NAMES[aiConfig.provider]})
                 </span>
               </div>
             )}

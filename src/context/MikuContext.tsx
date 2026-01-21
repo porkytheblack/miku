@@ -109,12 +109,13 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     setAIConfigState(config);
     setIsUsingDefaults(false);
     if (config) {
-      agentRef.current = createMikuAgent(config.provider, config.apiKey, config.model);
+      agentRef.current = createMikuAgent(config.provider, config.apiKey, config.model, config.baseUrl);
       // Save to localStorage
       try {
         localStorage.setItem('miku-ai-config', JSON.stringify({
           provider: config.provider,
           model: config.model,
+          baseUrl: config.baseUrl,
         }));
       } catch (e) {
         console.error('Failed to save config:', e);

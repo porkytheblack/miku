@@ -10,13 +10,16 @@ import {
 import { OpenAIProvider } from './providers/openai';
 import { AnthropicProvider } from './providers/anthropic';
 import { GoogleProvider } from './providers/google';
+import { OpenRouterProvider } from './providers/openrouter';
+import { OllamaProvider } from './providers/ollama';
+import { LMStudioProvider } from './providers/lmstudio';
 
 export class MikuAgent {
   private provider: AIProviderInterface;
   private documentContent: string = '';
   private documentLines: string[] = [];
 
-  constructor(providerType: AIProvider, apiKey: string, model: string) {
+  constructor(providerType: AIProvider, apiKey: string, model: string, baseUrl?: string) {
     switch (providerType) {
       case 'openai':
         this.provider = new OpenAIProvider(apiKey, model);
@@ -26,6 +29,15 @@ export class MikuAgent {
         break;
       case 'google':
         this.provider = new GoogleProvider(apiKey, model);
+        break;
+      case 'openrouter':
+        this.provider = new OpenRouterProvider(apiKey, model);
+        break;
+      case 'ollama':
+        this.provider = new OllamaProvider(model, baseUrl || 'http://localhost:11434');
+        break;
+      case 'lmstudio':
+        this.provider = new LMStudioProvider(model, baseUrl || 'http://localhost:1234/v1');
         break;
       default:
         throw new Error(`Unknown provider: ${providerType}`);
@@ -277,7 +289,8 @@ Respond with ONLY the rewritten text, no explanations or comments.`;
 export function createMikuAgent(
   provider: AIProvider,
   apiKey: string,
-  model: string
+  model: string,
+  baseUrl?: string
 ): MikuAgent {
-  return new MikuAgent(provider, apiKey, model);
+  return new MikuAgent(provider, apiKey, model, baseUrl);
 }
