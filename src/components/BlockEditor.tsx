@@ -443,13 +443,19 @@ export default function BlockEditor() {
       position: startIndex,
     }]);
 
-    // Adjust remaining suggestions' positions BEFORE updating content
-    // This prevents the useEffect from trying to re-adjust with stale reference
+    // Adjust remaining suggestions' positions and update in one go
+    // We must NOT call both updateSuggestions and acceptSuggestion separately
+    // because acceptSuggestion would overwrite the adjusted positions
     const remainingSuggestions = state.suggestions.filter(s => s.id !== id);
     if (remainingSuggestions.length > 0) {
       const adjustedRemaining = adjustSuggestions(remainingSuggestions, content, newContent);
       const validatedRemaining = validateSuggestionPositions(adjustedRemaining, newContent);
+      // Use updateSuggestions to set the adjusted remaining suggestions
+      // This replaces the entire suggestions array with the adjusted ones (without the accepted one)
       updateSuggestions(validatedRemaining);
+    } else {
+      // No remaining suggestions - just clear them
+      clearSuggestions();
     }
 
     // Update the reviewed content ref to the new content
@@ -458,8 +464,9 @@ export default function BlockEditor() {
 
     setContent(newContent);
     setLastReviewedContent('');
-    acceptSuggestion(id);
-  }, [content, state.suggestions, acceptSuggestion, updateSuggestions]);
+    // Don't call acceptSuggestion here - we already handled everything above
+    setActiveSuggestion(null);
+  }, [content, state.suggestions, updateSuggestions, clearSuggestions, setActiveSuggestion]);
 
   // Undo the last accepted suggestion
   const handleUndo = useCallback(() => {
