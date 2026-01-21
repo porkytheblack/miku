@@ -53,8 +53,9 @@ export default function BlockEditor() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
 
-  // Track previous content for position adjustment
-  const prevContentRef = useRef<string>('');
+  // Track the content that was used for the last review
+  // This is the "source of truth" for suggestion positions
+  const reviewedContentRef = useRef<string>('');
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -75,6 +76,8 @@ export default function BlockEditor() {
   // Manual review function
   const triggerManualReview = useCallback(() => {
     if (content.trim()) {
+      // Store the content being reviewed so we can adjust positions later
+      reviewedContentRef.current = content;
       requestReview(content, {
         aggressiveness: settings.aggressiveness,
         writingContext: settings.writingContext,
@@ -93,6 +96,8 @@ export default function BlockEditor() {
     // Only auto-review if in auto mode
     if (settings.reviewMode === 'auto' && content && content !== lastReviewedContent && state.status === 'idle') {
       pauseTimeoutRef.current = setTimeout(() => {
+        // Store the content being reviewed so we can adjust positions later
+        reviewedContentRef.current = content;
         requestReview(content, {
           aggressiveness: settings.aggressiveness,
           writingContext: settings.writingContext,
@@ -108,36 +113,59 @@ export default function BlockEditor() {
     };
   }, [content, lastReviewedContent, state.status, requestReview, settings.reviewMode, settings.aggressiveness, settings.writingContext]);
 
-  // Adjust suggestion positions when content changes
+  // Adjust suggestion positions when content changes after a review
+  // Only run when content changes, not when suggestions change
   useEffect(() => {
-    const prevContent = prevContentRef.current;
-    prevContentRef.current = content;
+    const reviewedContent = reviewedContentRef.current;
 
-    // Skip if no previous content or no suggestions
-    if (!prevContent || state.suggestions.length === 0 || prevContent === content) {
+    // Skip if no reviewed content or content hasn't changed
+    if (!reviewedContent || reviewedContent === content) {
       return;
     }
 
+    // Skip if no suggestions to adjust
+    if (state.suggestions.length === 0) {
+      reviewedContentRef.current = content;
+      return;
+    }
+
+    console.log('[BlockEditor] Content changed since review, adjusting positions...', {
+      reviewedLength: reviewedContent.length,
+      currentLength: content.length,
+    });
+
     // Check if the change is too drastic (more than 50% different length)
-    const lengthRatio = Math.min(content.length, prevContent.length) / Math.max(content.length, prevContent.length);
+    const lengthRatio = Math.min(content.length, reviewedContent.length) / Math.max(content.length, reviewedContent.length);
     if (lengthRatio < 0.5) {
+      console.log('[BlockEditor] Content changed too drastically, clearing suggestions');
       clearSuggestions();
+      reviewedContentRef.current = content;
       return;
     }
 
     // Adjust suggestion positions based on the text edit
-    const adjustedSuggestions = adjustSuggestions(state.suggestions, prevContent, content);
+    const adjustedSuggestions = adjustSuggestions(state.suggestions, reviewedContent, content);
 
     // Validate that adjusted suggestions still point to correct text
     const validatedSuggestions = validateSuggestionPositions(adjustedSuggestions, content);
 
+    console.log('[BlockEditor] Adjusted suggestions:', {
+      before: state.suggestions.length,
+      afterAdjust: adjustedSuggestions.length,
+      afterValidate: validatedSuggestions.length,
+    });
+
+    // Update the reviewed content ref first to prevent loops
+    reviewedContentRef.current = content;
+
     // If we lost too many suggestions, clear them all (content changed too much)
     if (validatedSuggestions.length < state.suggestions.length * 0.5) {
+      console.log('[BlockEditor] Lost too many suggestions, clearing all');
       clearSuggestions();
       return;
     }
 
-    // Update suggestions if any changed
+    // Only update if something actually changed
     if (validatedSuggestions.length !== state.suggestions.length ||
         validatedSuggestions.some((s, i) =>
           s.startIndex !== state.suggestions[i]?.startIndex ||
@@ -145,7 +173,8 @@ export default function BlockEditor() {
         )) {
       updateSuggestions(validatedSuggestions);
     }
-  }, [content, state.suggestions, clearSuggestions, updateSuggestions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]); // Only depend on content, not suggestions
 
   // Filtered slash commands
   const filteredCommands = useMemo(() => {
@@ -184,32 +213,22 @@ export default function BlockEditor() {
       });
     });
 
-    // Filter to only valid suggestions that match their expected text
-    const validSuggestions = state.suggestions.filter(suggestion => {
-      // Basic bounds checking
-      if (suggestion.startIndex < 0 || suggestion.endIndex > content.length || suggestion.startIndex >= suggestion.endIndex) {
-        console.log(`[BlockEditor] Rejected ${suggestion.id}: bounds check failed`, {
-          startIndex: suggestion.startIndex,
-          endIndex: suggestion.endIndex,
-          contentLength: content.length,
+    // Validate and fix suggestion positions using the textPosition utilities
+    const validSuggestions = validateSuggestionPositions(state.suggestions, content);
+
+    console.log('[BlockEditor] Valid suggestions after validation:', validSuggestions.length);
+
+    // Log any suggestions that were filtered out
+    if (validSuggestions.length < state.suggestions.length) {
+      const validIds = new Set(validSuggestions.map(s => s.id));
+      state.suggestions.filter(s => !validIds.has(s.id)).forEach(s => {
+        console.log(`[BlockEditor] Could not validate ${s.id}:`, {
+          originalText: JSON.stringify(s.originalText),
+          startIndex: s.startIndex,
+          endIndex: s.endIndex,
         });
-        return false;
-      }
-
-      // Verify the text at this position matches what we expect
-      const textAtPosition = content.slice(suggestion.startIndex, suggestion.endIndex);
-      if (textAtPosition !== suggestion.originalText) {
-        console.log(`[BlockEditor] Rejected ${suggestion.id}: text mismatch`, {
-          expected: JSON.stringify(suggestion.originalText),
-          actual: JSON.stringify(textAtPosition),
-        });
-        return false;
-      }
-
-      return true;
-    });
-
-    console.log('[BlockEditor] Valid suggestions after filtering:', validSuggestions.length);
+      });
+    }
 
     const sortedSuggestions = [...validSuggestions].sort((a, b) => a.startIndex - b.startIndex);
     let html = '';
