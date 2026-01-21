@@ -74,6 +74,7 @@ describe('Tauri utilities', () => {
         reviewMode: 'auto',
         aggressiveness: 'strict',
         writingContext: 'technical documentation',
+        soundEnabled: true,
       };
 
       const result = toBackendSettings(frontendSettings);
@@ -87,6 +88,7 @@ describe('Tauri utilities', () => {
         review_mode: 'auto',
         aggressiveness: 'strict',
         writing_context: 'technical documentation',
+        sound_enabled: true,
       });
     });
 
@@ -100,6 +102,7 @@ describe('Tauri utilities', () => {
         reviewMode: 'manual',
         aggressiveness: 'balanced',
         writingContext: '',
+        soundEnabled: true,
       };
 
       const result = toBackendSettings(frontendSettings);
@@ -119,6 +122,7 @@ describe('Tauri utilities', () => {
         review_mode: 'auto',
         aggressiveness: 'strict',
         writing_context: 'blog post',
+        sound_enabled: true,
       };
 
       const result = toFrontendSettings(backendSettings);
@@ -132,6 +136,7 @@ describe('Tauri utilities', () => {
         reviewMode: 'auto',
         aggressiveness: 'strict',
         writingContext: 'blog post',
+        soundEnabled: true,
       });
     });
 
@@ -145,6 +150,7 @@ describe('Tauri utilities', () => {
         review_mode: 'manual',
         aggressiveness: 'balanced',
         writing_context: '',
+        sound_enabled: false,
       };
 
       const result = toFrontendSettings(backendSettings);
@@ -164,6 +170,7 @@ describe('Tauri utilities', () => {
         reviewMode: 'manual',
         aggressiveness: 'gentle',
         writingContext: 'creative writing',
+        soundEnabled: true,
       };
 
       const backend = toBackendSettings(originalFrontend);
@@ -178,6 +185,7 @@ describe('Tauri utilities', () => {
       expect(roundTrip.reviewMode).toBe(originalFrontend.reviewMode);
       expect(roundTrip.aggressiveness).toBe(originalFrontend.aggressiveness);
       expect(roundTrip.writingContext).toBe(originalFrontend.writingContext);
+      expect(roundTrip.soundEnabled).toBe(originalFrontend.soundEnabled);
     });
   });
 });

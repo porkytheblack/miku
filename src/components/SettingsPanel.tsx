@@ -726,6 +726,49 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 Help Miku understand what you&apos;re writing for better suggestions.
               </p>
             </div>
+
+            {/* Sound Notification */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between">
+                <label
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  Sound Notification
+                </label>
+                <button
+                  onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })}
+                  className="relative w-11 h-6 rounded-full transition-colors"
+                  style={{
+                    background: settings.soundEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-default)',
+                  }}
+                  aria-label={settings.soundEnabled ? 'Disable sound' : 'Enable sound'}
+                >
+                  <span
+                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
+                    style={{
+                      background: 'white',
+                      transform: settings.soundEnabled ? 'translateX(20px)' : 'translateX(0)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                  />
+                </button>
+              </div>
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                Play a sound when Miku finishes reviewing your writing.
+              </p>
+            </div>
           </section>
 
           {/* Appearance section */}
