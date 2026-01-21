@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useAuth, isClerkConfigured } from '@/components/AuthProvider';
 
 // Dynamically import Clerk components
@@ -34,18 +35,18 @@ function FloatingHighlight({ color, delay, children }: { color: string; delay: n
 }
 
 export default function HomePage() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
   const [showHighlights, setShowHighlights] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [showCursor, setShowCursor] = useState(false);
 
-  // Redirect signed-in users to editor
+  // Redirect signed-in users to editor (only after auth is loaded)
   useEffect(() => {
-    if (isSignedIn) {
+    if (isLoaded && isSignedIn) {
       router.push('/editor');
     }
-  }, [isSignedIn, router]);
+  }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => {
     // Start showing highlights after a delay
@@ -65,8 +66,8 @@ export default function HomePage() {
     };
   }, []);
 
-  // Show loading state while redirecting signed-in users
-  if (isSignedIn) {
+  // Show loading state while auth is loading or redirecting signed-in users
+  if (!isLoaded || isSignedIn) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -77,7 +78,9 @@ export default function HomePage() {
             className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-4"
             style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
           />
-          <p style={{ color: 'var(--text-secondary)' }}>Opening editor...</p>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            {isSignedIn ? 'Opening editor...' : 'Loading...'}
+          </p>
         </div>
       </div>
     );
@@ -103,36 +106,29 @@ export default function HomePage() {
         />
       )}
 
-      {/* Floating Header Bar */}
+      {/* Floating Header Bar with Miku greeting */}
       <header className="w-full p-6 flex justify-center">
         <div
-          className="flex items-center gap-3 px-4 py-2 rounded-full"
+          className="flex items-center gap-3 px-5 py-2 rounded-full"
           style={{
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-default)',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
           }}
         >
-          {isClerkConfigured && SignInButton ? (
-            <SignInButton mode="modal">
-              <button
-                className="px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
-                style={{
-                  background: 'var(--accent-primary)',
-                  color: 'white',
-                }}
-              >
-                Sign In to Start
-              </button>
-            </SignInButton>
-          ) : (
-            <span
-              className="px-4 py-2 text-sm"
-              style={{ color: 'var(--text-tertiary)' }}
-            >
-              Sign-in not configured
-            </span>
-          )}
+          <span
+            className="text-sm font-medium"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Hi, I&apos;m Miku
+          </span>
+          <Image
+            src="/brand/miku-colored.svg"
+            alt="Miku"
+            width={32}
+            height={32}
+            className="rounded-full"
+          />
         </div>
       </header>
 
