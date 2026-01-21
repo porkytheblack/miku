@@ -506,6 +506,22 @@ export default function BlockEditor() {
     fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
   };
 
+  // Shared text styles - MUST be identical for textarea and highlight div
+  const sharedTextStyles: React.CSSProperties = {
+    fontSize: `${settings.fontSize}px`,
+    lineHeight: settings.lineHeight,
+    fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
+    whiteSpace: 'pre-wrap',
+    wordWrap: 'break-word',
+    overflowWrap: 'break-word',
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    boxSizing: 'border-box',
+    letterSpacing: 'normal',
+    wordSpacing: 'normal',
+  };
+
   return (
     <div
       className="editor-wrapper w-full"
@@ -520,7 +536,6 @@ export default function BlockEditor() {
           width: '100%',
           maxWidth: '100%',
           padding: '32px 24px',
-          paddingBottom: '80px', // Space for floating bar to hover over
           minHeight: '100vh',
           boxSizing: 'border-box',
         }}
@@ -543,47 +558,16 @@ export default function BlockEditor() {
             />
           </div>
         ) : (
-          /* Editor with highlight overlay - using precise positioning */
+          /* Editor with highlight overlay */
           <div
             className="editor-highlight-container"
             style={{
               position: 'relative',
               width: '100%',
+              minHeight: 'calc(100vh - 64px)',
             }}
           >
-            {/* Highlight backdrop layer */}
-            <div
-              ref={highlightRef}
-              className="highlight-backdrop"
-              onClick={handleHighlightClick}
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                color: 'transparent',
-                overflow: 'hidden',
-                pointerEvents: 'none',
-                zIndex: 1,
-                // Text must match textarea exactly
-                fontSize: `${settings.fontSize}px`,
-                lineHeight: settings.lineHeight,
-                fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-                overflowWrap: 'break-word',
-                // Reset everything
-                margin: 0,
-                padding: 0,
-                border: 'none',
-                boxSizing: 'border-box',
-              }}
-              dangerouslySetInnerHTML={{ __html: highlightedHTML }}
-            />
-
-            {/* Actual textarea for editing */}
+            {/* Textarea - the actual editable element */}
             <textarea
               ref={textareaRef}
               value={content}
@@ -592,28 +576,19 @@ export default function BlockEditor() {
               onScroll={syncScroll}
               className="editor-textarea"
               style={{
-                position: 'relative',
+                ...sharedTextStyles,
+                position: 'absolute',
+                top: 0,
+                left: 0,
                 width: '100%',
-                minHeight: 'calc(100vh - 150px)',
+                height: '100%',
+                minHeight: 'calc(100vh - 64px)',
                 background: 'transparent',
                 color: 'var(--text-primary)',
                 caretColor: 'var(--accent-primary)',
-                zIndex: 2,
-                // Text styling
-                fontSize: `${settings.fontSize}px`,
-                lineHeight: settings.lineHeight,
-                fontFamily: settings.fontFamily === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-                overflowWrap: 'break-word',
-                // Reset browser defaults
-                margin: 0,
-                padding: 0,
-                border: 'none',
+                zIndex: 1,
                 outline: 'none',
                 resize: 'none',
-                boxSizing: 'border-box',
-                display: 'block',
               }}
               placeholder={settings.reviewMode === 'manual'
                 ? `Start writing...
@@ -635,6 +610,39 @@ Tips:
               spellCheck={false}
               aria-label="Writing editor"
             />
+
+            {/* Highlight layer - on top but with pointer-events: none except for marks */}
+            <div
+              ref={highlightRef}
+              className="highlight-layer"
+              onClick={handleHighlightClick}
+              style={{
+                ...sharedTextStyles,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                minHeight: 'calc(100vh - 64px)',
+                color: 'transparent',
+                background: 'transparent',
+                pointerEvents: 'none',
+                zIndex: 2,
+                overflow: 'hidden',
+              }}
+              dangerouslySetInnerHTML={{ __html: highlightedHTML }}
+            />
+
+            {/* Invisible spacer to maintain container height */}
+            <div
+              style={{
+                ...sharedTextStyles,
+                visibility: 'hidden',
+                minHeight: 'calc(100vh - 64px)',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {content || 'x'}
+            </div>
           </div>
         )}
 
@@ -760,7 +768,7 @@ Tips:
           outline: none;
         }
 
-        .highlight-backdrop {
+        .highlight-layer {
           user-select: none;
           pointer-events: none;
           /* Match textarea text rendering exactly */
@@ -770,8 +778,8 @@ Tips:
           -moz-osx-font-smoothing: grayscale;
         }
 
-        /* Ensure marks inside highlight layer can receive clicks */
-        .highlight-backdrop :global(mark) {
+        /* Marks inside highlight layer receive clicks */
+        .highlight-layer :global(mark) {
           pointer-events: auto;
           cursor: pointer;
         }
