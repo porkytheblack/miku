@@ -338,12 +338,81 @@ jobs:
           echo "$SIG_CONTENT" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
+      - name: Collect installer files
+        shell: bash
+        run: |
+          mkdir -p installers
+          VERSION="${{ needs.prepare.outputs.version }}"
+          PLATFORM="${{ matrix.os_name }}-${{ matrix.arch }}"
+
+          if [[ "${{ matrix.os_name }}" == "darwin" ]]; then
+            # Find DMG installer
+            DMG_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+            DMG_FILE=$(find "$DMG_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
+            if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}.dmg"
+              cp "$DMG_FILE" "installers/$INSTALLER_NAME"
+              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
+              echo "Found macOS installer: $INSTALLER_NAME"
+            else
+              echo "No DMG installer found (optional)"
+            fi
+
+          elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
+            # Find NSIS installer (.exe) - preferred over MSI for installers
+            NSIS_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+            NSIS_FILE=$(find "$NSIS_DIR" -name "*.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$NSIS_FILE" ] && [ -f "$NSIS_FILE" ]; then
+              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.exe"
+              cp "$NSIS_FILE" "installers/$INSTALLER_NAME"
+              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
+              echo "Found Windows NSIS installer: $INSTALLER_NAME"
+            else
+              # Fallback to MSI as installer
+              MSI_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
+              MSI_FILE=$(find "$MSI_DIR" -name "*.msi" -type f 2>/dev/null | head -1)
+              if [ -n "$MSI_FILE" ] && [ -f "$MSI_FILE" ]; then
+                INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.msi"
+                cp "$MSI_FILE" "installers/$INSTALLER_NAME"
+                echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
+                echo "Found Windows MSI installer: $INSTALLER_NAME"
+              else
+                echo "No Windows installer found (optional)"
+              fi
+            fi
+
+          elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
+            # Use the raw AppImage as the installer (not the tar.gz)
+            APPIMAGE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+            APPIMAGE_FILE=$(find "$APPIMAGE_DIR" -name "*.AppImage" -not -name "*.sig" -type f 2>/dev/null | head -1)
+            if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
+              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}.AppImage"
+              cp "$APPIMAGE_FILE" "installers/$INSTALLER_NAME"
+              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
+              echo "Found Linux AppImage installer: $INSTALLER_NAME"
+            else
+              echo "No AppImage installer found (optional)"
+            fi
+          fi
+
+          # List installers found
+          echo "Installers collected:"
+          ls -la installers/ 2>/dev/null || echo "No installers"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.os_name }}-${{ matrix.arch }}
           path: artifacts/
           retention-days: 1
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: installers/
+          retention-days: 1
+          if-no-files-found: ignore
 
       # -------------------------------------------------------------------------
       # Cleanup (macOS only)
@@ -374,10 +443,20 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
-      - name: List artifacts
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: List artifacts and installers
         run: |
           echo "Downloaded artifacts:"
           ls -la artifacts/
+          echo ""
+          echo "Downloaded installers:"
+          ls -la installers/ 2>/dev/null || echo "No installers found"
 
       - name: Setup rclone for R2
         run: |
@@ -400,7 +479,8 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           BUCKET="${{ secrets.R2_BUCKET_NAME }}"
 
-          # Upload each artifact
+          # Upload each update artifact
+          echo "=== Uploading Update Artifacts ==="
           for file in artifacts/*; do
             if [ -f "$file" ]; then
               FILENAME=$(basename "$file")
@@ -413,6 +493,29 @@ jobs:
             fi
           done
 
+      - name: Upload installers to R2
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BUCKET="${{ secrets.R2_BUCKET_NAME }}"
+
+          # Upload each installer to a separate path
+          echo "=== Uploading Installers ==="
+          if [ -d "installers" ] && [ "$(ls -A installers 2>/dev/null)" ]; then
+            for file in installers/*; do
+              if [ -f "$file" ]; then
+                FILENAME=$(basename "$file")
+                R2_KEY="${{ env.APP_SLUG }}/installers/$VERSION/$FILENAME"
+
+                echo "Uploading installer $FILENAME to r2:$BUCKET/$R2_KEY"
+                rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+
+                echo "Uploaded installer: $R2_KEY"
+              fi
+            done
+          else
+            echo "No installers to upload"
+          fi
+
       - name: Register release with Oasis
         env:
           RELEASE_NOTES: ${{ needs.prepare.outputs.release_notes }}
@@ -424,7 +527,7 @@ jobs:
           ARTIFACTS="["
           FIRST=true
 
-          # Process each platform
+          # Process each platform for update artifacts
           for platform in "darwin-aarch64" "darwin-x86_64" "linux-x86_64" "windows-x86_64"; do
             OS=$(echo $platform | cut -d'-' -f1)
             ARCH=$(echo $platform | cut -d'-' -f2)
@@ -460,15 +563,65 @@ jobs:
 
           ARTIFACTS="$ARTIFACTS]"
 
+          # Build installers array for Oasis API
+          INSTALLERS="["
+          FIRST_INSTALLER=true
+
+          # Process installers for each platform
+          declare -A INSTALLER_DISPLAY_NAMES
+          INSTALLER_DISPLAY_NAMES["darwin-aarch64"]="macOS (Apple Silicon)"
+          INSTALLER_DISPLAY_NAMES["darwin-x86_64"]="macOS (Intel)"
+          INSTALLER_DISPLAY_NAMES["darwin-universal"]="macOS"
+          INSTALLER_DISPLAY_NAMES["windows-x86_64"]="Windows (64-bit)"
+          INSTALLER_DISPLAY_NAMES["linux-x86_64"]="Linux (64-bit)"
+
+          for platform in "darwin-aarch64" "darwin-x86_64" "windows-x86_64" "linux-x86_64"; do
+            OS=$(echo $platform | cut -d'-' -f1)
+
+            # Determine installer file pattern based on platform
+            if [[ "$OS" == "darwin" ]]; then
+              INSTALLER_FILE="installers/${{ env.APP_NAME }}_${VERSION}_${platform}.dmg"
+            elif [[ "$OS" == "windows" ]]; then
+              # Check for .exe first, then .msi
+              INSTALLER_FILE="installers/${{ env.APP_NAME }}_${VERSION}_${platform}_setup.exe"
+              if [ ! -f "$INSTALLER_FILE" ]; then
+                INSTALLER_FILE="installers/${{ env.APP_NAME }}_${VERSION}_${platform}_setup.msi"
+              fi
+            elif [[ "$OS" == "linux" ]]; then
+              INSTALLER_FILE="installers/${{ env.APP_NAME }}_${VERSION}_${platform}.AppImage"
+            fi
+
+            if [ -f "$INSTALLER_FILE" ]; then
+              FILENAME=$(basename "$INSTALLER_FILE")
+              R2_KEY="${{ env.APP_SLUG }}/installers/$VERSION/$FILENAME"
+              DISPLAY_NAME="${INSTALLER_DISPLAY_NAMES[$platform]:-$platform}"
+
+              if [ "$FIRST_INSTALLER" = true ]; then
+                FIRST_INSTALLER=false
+              else
+                INSTALLERS="$INSTALLERS,"
+              fi
+
+              INSTALLERS="$INSTALLERS{\"platform\":\"$platform\",\"filename\":\"$FILENAME\",\"r2_key\":\"$R2_KEY\",\"display_name\":\"$DISPLAY_NAME\"}"
+              echo "Added installer for $platform: $FILENAME"
+            else
+              echo "No installer found for $platform (optional)"
+            fi
+          done
+
+          INSTALLERS="$INSTALLERS]"
+
           # Create the API payload using jq with --arg for proper escaping
           PAYLOAD=$(jq -n \
             --arg version "$VERSION" \
             --arg notes "$RELEASE_NOTES" \
             --argjson artifacts "$ARTIFACTS" \
+            --argjson installers "$INSTALLERS" \
             '{
               version: $version,
               notes: $notes,
               artifacts: $artifacts,
+              installers: $installers,
               auto_publish: true
             }')
 
@@ -504,27 +657,40 @@ jobs:
           body: |
             ## Miku v${{ needs.prepare.outputs.version }}
 
-            ### Downloads
+            ### 📥 Downloads (Installers)
 
             **macOS:**
-            - [Apple Silicon (M1/M2/M3)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-aarch64.app.tar.gz)
-            - [Intel](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-x86_64.app.tar.gz)
+            - [Apple Silicon (M1/M2/M3) .dmg](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-aarch64.dmg)
+            - [Intel .dmg](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-x86_64.dmg)
 
             **Windows:**
-            - [Windows (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64.msi)
+            - [Windows (64-bit) Installer](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64_setup.exe)
 
             **Linux:**
-            - [AppImage (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_linux-x86_64.AppImage.tar.gz)
+            - [AppImage (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_linux-x86_64.AppImage)
+
+            ### 🔄 Update Artifacts (for existing installations)
+
+            <details>
+            <summary>Click to expand update artifact links</summary>
+
+            - [macOS Apple Silicon .tar.gz](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-aarch64.app.tar.gz)
+            - [macOS Intel .tar.gz](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-x86_64.app.tar.gz)
+            - [Windows .msi](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64.msi)
+            - [Linux .AppImage.tar.gz](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_linux-x86_64.AppImage.tar.gz)
+
+            </details>
 
             ### What's New
             ${{ needs.prepare.outputs.release_notes }}
 
             ---
 
-            *This release is available through the in-app updater.*
+            *Existing installations will receive this update automatically via the in-app updater.*
           draft: false
           prerelease: false
           files: |
             artifacts/*
+            installers/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
