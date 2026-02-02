@@ -292,12 +292,11 @@ jobs:
 
               # Sign the tarball using Tauri signer CLI
               echo "Signing the tarball..."
-              # The tauri-cli was installed by tauri-action during build
-              SIGN_CMD="cargo tauri signer sign"
+              # Use npx to run tauri CLI (installed via npm ci)
               if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
-                $SIGN_CMD -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TARBALL"
+                npx --yes @tauri-apps/cli signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TARBALL"
               else
-                $SIGN_CMD -k "$TAURI_SIGNING_PRIVATE_KEY" "$TARBALL"
+                npx --yes @tauri-apps/cli signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" "$TARBALL"
               fi
               if [ ! -f "${TARBALL}.sig" ]; then
                 echo "Failed to sign tarball!"
