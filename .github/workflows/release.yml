@@ -384,14 +384,15 @@ jobs:
           # Configure rclone for Cloudflare R2
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf << EOF
-          [r2]
-          type = s3
-          provider = Cloudflare
-          access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          acl = private
-          EOF
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+acl = private
+no_check_bucket = true
+EOF
 
       - name: Upload artifacts to R2
         run: |
