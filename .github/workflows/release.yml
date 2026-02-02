@@ -5,23 +5,109 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.0)'
+        required: false
+        type: string
+
+env:
+  APP_NAME: miku
+  APP_SLUG: miku
 
 jobs:
-  release:
+  # =============================================================================
+  # Job 1: Prepare Release
+  # Extract version, validate, and prepare release metadata
+  # =============================================================================
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          else
+            echo "No version specified and not triggered by tag"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            NOTES=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD | head -20)
+          else
+            NOTES=$(git log --pretty=format:"- %s" -10)
+          fi
+
+          # Escape for JSON
+          NOTES=$(echo "$NOTES" | jq -Rs .)
+          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+
+  # =============================================================================
+  # Job 2: Build for all platforms
+  # Matrix build for macOS (ARM64 + Intel), Windows, and Linux
+  # =============================================================================
+  build:
+    needs: prepare
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
+          # macOS ARM64 (Apple Silicon)
           - platform: macos-latest
-            args: --target aarch64-apple-darwin
+            target: aarch64-apple-darwin
+            os_name: darwin
+            arch: aarch64
+            artifact_ext: .app.tar.gz
+            artifact_pattern: "*.app.tar.gz"
+            sig_pattern: "*.app.tar.gz.sig"
+
+          # macOS Intel
           - platform: macos-latest
-            args: --target x86_64-apple-darwin
+            target: x86_64-apple-darwin
+            os_name: darwin
+            arch: x86_64
+            artifact_ext: .app.tar.gz
+            artifact_pattern: "*.app.tar.gz"
+            sig_pattern: "*.app.tar.gz.sig"
+
+          # Linux x64
           - platform: ubuntu-22.04
-            args: ''
+            target: x86_64-unknown-linux-gnu
+            os_name: linux
+            arch: x86_64
+            artifact_ext: .AppImage.tar.gz
+            artifact_pattern: "*.AppImage.tar.gz"
+            sig_pattern: "*.AppImage.tar.gz.sig"
+
+          # Windows x64
           - platform: windows-latest
-            args: ''
+            target: x86_64-pc-windows-msvc
+            os_name: windows
+            arch: x86_64
+            artifact_ext: .msi
+            artifact_pattern: "*.msi"
+            sig_pattern: "*.msi.sig"
 
     runs-on: ${{ matrix.platform }}
 
@@ -29,12 +115,49 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # -------------------------------------------------------------------------
+      # Platform-specific dependencies
+      # -------------------------------------------------------------------------
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      # -------------------------------------------------------------------------
+      # Apple signing setup (macOS only)
+      # -------------------------------------------------------------------------
+      - name: Import Apple certificate
+        if: startsWith(matrix.platform, 'macos')
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode > $CERTIFICATE_PATH
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Clean up
+          rm $CERTIFICATE_PATH
+
+          # Export keychain path for later steps
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+      # -------------------------------------------------------------------------
+      # Build tools setup
+      # -------------------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,7 +167,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -54,14 +177,325 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build the app
+      # -------------------------------------------------------------------------
+      # Update version in configuration files
+      # -------------------------------------------------------------------------
+      - name: Update version
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          # Update package.json
+          npm pkg set version="$VERSION"
+
+          # Update tauri.conf.json
+          if command -v jq &> /dev/null; then
+            jq ".version = \"$VERSION\"" src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+          else
+            # Fallback for Windows without jq
+            node -e "
+              const fs = require('fs');
+              const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+              conf.version = '$VERSION';
+              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2));
+            "
+          fi
+
+          # Update Cargo.toml (using sed or node)
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          elif [[ "$OSTYPE" == "linux"* ]]; then
+            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          else
+            # Windows fallback
+            node -e "
+              const fs = require('fs');
+              let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+              cargo = cargo.replace(/^version = \".*\"/m, 'version = \"$VERSION\"');
+              fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+            "
+          fi
+
+      # -------------------------------------------------------------------------
+      # Build Tauri app with signing
+      # -------------------------------------------------------------------------
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tauri updater signing
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple signing (macOS only)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Miku v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
+          args: --target ${{ matrix.target }}
+          # Don't create GitHub release - we handle that separately
+          tagName: ""
+          releaseName: ""
+
+      # -------------------------------------------------------------------------
+      # Collect and upload build artifacts
+      # -------------------------------------------------------------------------
+      - name: Find build artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          # Find the bundle directory
+          if [[ "${{ matrix.os_name }}" == "darwin" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+          elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
+          fi
+
+          echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+
+          # List artifacts for debugging
+          echo "Contents of bundle directory:"
+          ls -la "$BUNDLE_DIR" || echo "Directory not found"
+
+      - name: Prepare artifacts for upload
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          VERSION="${{ needs.prepare.outputs.version }}"
+          PLATFORM="${{ matrix.os_name }}-${{ matrix.arch }}"
+
+          # Copy artifacts with standardized names
+          if [[ "${{ matrix.os_name }}" == "darwin" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+            # Find the .app.tar.gz file
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" -type f | head -1)
+            SIG=$(find "$BUNDLE_DIR" -name "*.app.tar.gz.sig" -type f | head -1)
+          elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage.tar.gz" -type f | head -1)
+            SIG=$(find "$BUNDLE_DIR" -name "*.AppImage.tar.gz.sig" -type f | head -1)
+          elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f | head -1)
+            SIG=$(find "$BUNDLE_DIR" -name "*.msi.sig" -type f | head -1)
+          fi
+
+          if [ -n "$ARTIFACT" ]; then
+            # Copy with standardized name
+            ARTIFACT_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}${{ matrix.artifact_ext }}"
+            cp "$ARTIFACT" "artifacts/$ARTIFACT_NAME"
+            echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+            echo "Artifact: $ARTIFACT_NAME"
+          else
+            echo "No artifact found!"
+            exit 1
+          fi
+
+          if [ -n "$SIG" ]; then
+            SIG_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}${{ matrix.artifact_ext }}.sig"
+            cp "$SIG" "artifacts/$SIG_NAME"
+            echo "SIG_NAME=$SIG_NAME" >> $GITHUB_ENV
+            echo "Signature: $SIG_NAME"
+          else
+            echo "No signature found - this is required for updates"
+            exit 1
+          fi
+
+          # Read signature content for later use
+          SIG_CONTENT=$(cat "artifacts/$SIG_NAME")
+          echo "SIG_CONTENT<<EOF" >> $GITHUB_ENV
+          echo "$SIG_CONTENT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os_name }}-${{ matrix.arch }}
+          path: artifacts/
+          retention-days: 1
+
+      # -------------------------------------------------------------------------
+      # Cleanup (macOS only)
+      # -------------------------------------------------------------------------
+      - name: Cleanup keychain
+        if: startsWith(matrix.platform, 'macos') && always()
+        run: |
+          if [ -n "$KEYCHAIN_PATH" ]; then
+            security delete-keychain $KEYCHAIN_PATH || true
+          fi
+
+  # =============================================================================
+  # Job 3: Upload to R2 and Register with Oasis
+  # =============================================================================
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -la artifacts/
+
+      - name: Setup rclone for R2
+        run: |
+          curl -O https://downloads.rclone.org/rclone-current-linux-amd64.deb
+          sudo dpkg -i rclone-current-linux-amd64.deb
+
+          # Configure rclone for Cloudflare R2
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          EOF
+
+      - name: Upload artifacts to R2
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BUCKET="${{ secrets.R2_BUCKET_NAME }}"
+
+          # Upload each artifact
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              R2_KEY="${{ env.APP_SLUG }}/releases/$VERSION/$FILENAME"
+
+              echo "Uploading $FILENAME to r2:$BUCKET/$R2_KEY"
+              rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+
+              echo "Uploaded: $R2_KEY"
+            fi
+          done
+
+      - name: Register release with Oasis
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          NOTES=${{ needs.prepare.outputs.release_notes }}
+          BUCKET="${{ secrets.R2_BUCKET_NAME }}"
+
+          # Build artifacts array for Oasis API
+          ARTIFACTS="["
+          FIRST=true
+
+          # Process each platform
+          for platform in "darwin-aarch64" "darwin-x86_64" "linux-x86_64" "windows-x86_64"; do
+            OS=$(echo $platform | cut -d'-' -f1)
+            ARCH=$(echo $platform | cut -d'-' -f2)
+
+            # Determine file extension based on platform
+            if [[ "$OS" == "darwin" ]]; then
+              EXT=".app.tar.gz"
+            elif [[ "$OS" == "linux" ]]; then
+              EXT=".AppImage.tar.gz"
+            elif [[ "$OS" == "windows" ]]; then
+              EXT=".msi"
+            fi
+
+            ARTIFACT_FILE="artifacts/${{ env.APP_NAME }}_${VERSION}_${platform}${EXT}"
+            SIG_FILE="${ARTIFACT_FILE}.sig"
+
+            if [ -f "$ARTIFACT_FILE" ] && [ -f "$SIG_FILE" ]; then
+              SIGNATURE=$(cat "$SIG_FILE")
+              R2_KEY="${{ env.APP_SLUG }}/releases/$VERSION/${{ env.APP_NAME }}_${VERSION}_${platform}${EXT}"
+
+              if [ "$FIRST" = true ]; then
+                FIRST=false
+              else
+                ARTIFACTS="$ARTIFACTS,"
+              fi
+
+              ARTIFACTS="$ARTIFACTS{\"platform\":\"$platform\",\"signature\":\"$SIGNATURE\",\"r2_key\":\"$R2_KEY\"}"
+              echo "Added artifact for $platform"
+            else
+              echo "Warning: Missing artifact or signature for $platform"
+            fi
+          done
+
+          ARTIFACTS="$ARTIFACTS]"
+
+          # Create the API payload
+          PAYLOAD=$(jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --argjson artifacts "$ARTIFACTS" \
+            '{
+              version: $version,
+              notes: $notes,
+              artifacts: $artifacts,
+              auto_publish: true
+            }')
+
+          echo "Registering release with Oasis server..."
+          echo "Payload:"
+          echo "$PAYLOAD" | jq .
+
+          # Make the API call
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.OASIS_SERVER_URL }}/ci/apps/${{ env.APP_SLUG }}/releases" \
+            -H "Authorization: Bearer ${{ secrets.OASIS_CI_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Failed to register release with Oasis server"
+            exit 1
+          fi
+
+          echo "Successfully registered release $VERSION with Oasis server"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: Miku v${{ needs.prepare.outputs.version }}
+          body: |
+            ## Miku v${{ needs.prepare.outputs.version }}
+
+            ### Downloads
+
+            **macOS:**
+            - [Apple Silicon (M1/M2/M3)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-aarch64.app.tar.gz)
+            - [Intel](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_darwin-x86_64.app.tar.gz)
+
+            **Windows:**
+            - [Windows (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64.msi)
+
+            **Linux:**
+            - [AppImage (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/releases/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_linux-x86_64.AppImage.tar.gz)
+
+            ### What's New
+            ${{ needs.prepare.outputs.release_notes }}
+
+            ---
+
+            *This release is available through the in-app updater.*
+          draft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          files: |
+            artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

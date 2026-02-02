@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Miku",
-  "version": "0.1.0",
+  "version": "0.0.3",
   "identifier": "com.miku.editor",
   "build": {
     "frontendDist": "../out",
@@ -44,6 +44,18 @@
     "longDescription": "Miku is a markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer. Unlike conventional AI writing tools that interrupt your flow with real-time suggestions and autocomplete, Miku stays silent while you write and only surfaces feedback after you've finished a thought.",
     "macOS": {
       "minimumSystemVersion": "10.15"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDN0NGRTBGQTYzMTgxN0QKUldSOWdUR21ELzU4Yk1LUGlTaURCbXJBTU84MFRJckYyV3RpT09sVGJCdHN1WGtYZmdBVHRkNWkK",
+      "endpoints": [
+        "https://oasis.dterminal.net/miku/update/{{target}}-{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
