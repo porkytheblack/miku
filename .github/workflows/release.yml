@@ -97,8 +97,8 @@ jobs:
             os_name: linux
             arch: x86_64
             artifact_ext: .AppImage.tar.gz
-            artifact_pattern: "*.AppImage.tar.gz"
-            sig_pattern: "*.AppImage.tar.gz.sig"
+            artifact_pattern: "*.AppImage"
+            sig_pattern: "*.AppImage.sig"
 
           # Windows x64
           - platform: windows-latest
@@ -263,6 +263,9 @@ jobs:
 
       - name: Prepare artifacts for upload
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p artifacts
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -276,8 +279,32 @@ jobs:
             SIG=$(find "$BUNDLE_DIR" -name "*.app.tar.gz.sig" -type f | head -1)
           elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
             BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage.tar.gz" -type f | head -1)
-            SIG=$(find "$BUNDLE_DIR" -name "*.AppImage.tar.gz.sig" -type f | head -1)
+            # Tauri produces .AppImage directly - we need to compress it for the updater
+            APPIMAGE=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f | head -1)
+
+            if [ -n "$APPIMAGE" ]; then
+              # Create tar.gz archive of the AppImage (required for Tauri updater)
+              APPIMAGE_NAME=$(basename "$APPIMAGE")
+              TARBALL="${APPIMAGE}.tar.gz"
+              echo "Compressing $APPIMAGE_NAME to tar.gz..."
+              tar -czvf "$TARBALL" -C "$(dirname "$APPIMAGE")" "$APPIMAGE_NAME"
+              ARTIFACT="$TARBALL"
+
+              # Sign the tarball using Tauri signer CLI
+              echo "Signing the tarball..."
+              # The tauri-cli was installed by tauri-action during build
+              SIGN_CMD="cargo tauri signer sign"
+              if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+                $SIGN_CMD -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TARBALL"
+              else
+                $SIGN_CMD -k "$TAURI_SIGNING_PRIVATE_KEY" "$TARBALL"
+              fi
+              if [ ! -f "${TARBALL}.sig" ]; then
+                echo "Failed to sign tarball!"
+                exit 1
+              fi
+              SIG="${TARBALL}.sig"
+            fi
           elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
             BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
             ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f | head -1)

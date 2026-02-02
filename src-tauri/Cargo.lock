@@ -1939,7 +1939,7 @@ dependencies = [
 
 [[package]]
 name = "miku"
-version = "0.1.0"
+version = "0.0.3"
 dependencies = [
  "dirs 5.0.1",
  "log",
