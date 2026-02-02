@@ -57,9 +57,12 @@ jobs:
             NOTES=$(git log --pretty=format:"- %s" -10)
           fi
 
-          # Escape for JSON
-          NOTES=$(echo "$NOTES" | jq -Rs .)
-          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+          # Output using heredoc delimiter to preserve newlines
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            echo "$NOTES"
+            echo "RELEASE_NOTES_EOF"
+          } >> $GITHUB_OUTPUT
 
   # =============================================================================
   # Job 2: Build for all platforms
@@ -97,8 +100,8 @@ jobs:
             os_name: linux
             arch: x86_64
             artifact_ext: .AppImage.tar.gz
-            artifact_pattern: "*.AppImage"
-            sig_pattern: "*.AppImage.sig"
+            artifact_pattern: "*.AppImage.tar.gz"
+            sig_pattern: "*.AppImage.tar.gz.sig"
 
           # Windows x64
           - platform: windows-latest
@@ -235,9 +238,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           args: --target ${{ matrix.target }}
-          # Don't create GitHub release - we handle that separately
-          tagName: ""
-          releaseName: ""
 
       # -------------------------------------------------------------------------
       # Collect and upload build artifacts
@@ -280,7 +280,8 @@ jobs:
           elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
             BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
             # Tauri produces .AppImage directly - we need to compress it for the updater
-            APPIMAGE=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f | head -1)
+            # Exclude .sig files to avoid matching signature files
+            APPIMAGE=$(find "$BUNDLE_DIR" -name "*.AppImage" -not -name "*.sig" -type f | head -1)
 
             if [ -n "$APPIMAGE" ]; then
               # Create tar.gz archive of the AppImage (required for Tauri updater)
@@ -360,6 +361,8 @@ jobs:
   release:
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -383,16 +386,14 @@ jobs:
 
           # Configure rclone for Cloudflare R2
           mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf << EOF
-[r2]
-type = s3
-provider = Cloudflare
-access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-acl = private
-no_check_bucket = true
-EOF
+          echo "[r2]" > ~/.config/rclone/rclone.conf
+          echo "type = s3" >> ~/.config/rclone/rclone.conf
+          echo "provider = Cloudflare" >> ~/.config/rclone/rclone.conf
+          echo "access_key_id = ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}" >> ~/.config/rclone/rclone.conf
+          echo "secret_access_key = ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}" >> ~/.config/rclone/rclone.conf
+          echo "endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com" >> ~/.config/rclone/rclone.conf
+          echo "acl = private" >> ~/.config/rclone/rclone.conf
+          echo "no_check_bucket = true" >> ~/.config/rclone/rclone.conf
 
       - name: Upload artifacts to R2
         run: |
@@ -413,9 +414,10 @@ EOF
           done
 
       - name: Register release with Oasis
+        env:
+          RELEASE_NOTES: ${{ needs.prepare.outputs.release_notes }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
-          NOTES=${{ needs.prepare.outputs.release_notes }}
           BUCKET="${{ secrets.R2_BUCKET_NAME }}"
 
           # Build artifacts array for Oasis API
@@ -458,10 +460,10 @@ EOF
 
           ARTIFACTS="$ARTIFACTS]"
 
-          # Create the API payload
+          # Create the API payload using jq with --arg for proper escaping
           PAYLOAD=$(jq -n \
             --arg version "$VERSION" \
-            --arg notes "$NOTES" \
+            --arg notes "$RELEASE_NOTES" \
             --argjson artifacts "$ARTIFACTS" \
             '{
               version: $version,
