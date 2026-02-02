@@ -1,6 +1,6 @@
 [package]
 name = "miku"
-version = "0.1.0"
+version = "0.0.3"
 description = "A markdown editor that treats AI as a tool, not a collaborator"
 authors = ["Miku Team"]
 license = "MIT"
