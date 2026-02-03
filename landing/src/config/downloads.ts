@@ -37,7 +37,7 @@ export interface PlatformDownloads {
  * Current version being distributed
  * Update this when releasing a new version
  */
-export const CURRENT_VERSION = "0.0.7";
+export const CURRENT_VERSION = "0.0.8";
 
 /**
  * GitHub repository information
@@ -56,50 +56,30 @@ export const GITHUB_RELEASE_TAG = `${GITHUB_REPO}/releases/tag/v${CURRENT_VERSIO
  */
 export const DOWNLOAD_LINKS: PlatformDownloads = {
   macos: {
-    universal: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_universal.dmg`,
-      label: "macOS Universal",
-      sublabel: "Intel & Apple Silicon",
-    },
     arm64: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_aarch64.dmg`,
+      url: `https://oasis.dterminal.net/miku/download/darwin-aarch64/${CURRENT_VERSION}`,
       label: "macOS (Apple Silicon)",
       sublabel: "M1/M2/M3/M4",
     },
     x64: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_x64.dmg`,
+      url: `https://oasis.dterminal.net/miku/download/darwin-x86_64/${CURRENT_VERSION}`,
       label: "macOS (Intel)",
       sublabel: "x86_64",
     },
   },
   windows: {
-    msi: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_x64_en-US.msi`,
-      label: "Windows Installer",
-      sublabel: ".msi",
-    },
     exe: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_x64-setup.exe`,
+      url: `https://oasis.dterminal.net/miku/download/windows-x86_64/${CURRENT_VERSION}`,
       label: "Windows Setup",
       sublabel: ".exe",
     },
   },
   linux: {
     appImage: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_amd64.AppImage`,
+      url: `https://oasis.dterminal.net/miku/download/linux-x86_64/${CURRENT_VERSION}`,
       label: "Linux AppImage",
       sublabel: "Universal",
-    },
-    deb: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_amd64.deb`,
-      label: "Debian/Ubuntu",
-      sublabel: ".deb",
-    },
-    rpm: {
-      url: `${GITHUB_REPO}/releases/download/v${CURRENT_VERSION}/Miku_${CURRENT_VERSION}_amd64.rpm`,
-      label: "Fedora/RHEL",
-      sublabel: ".rpm",
-    },
+    }
   },
 };
 
@@ -109,9 +89,9 @@ export const DOWNLOAD_LINKS: PlatformDownloads = {
 export function getRecommendedDownload(platform: "macos" | "windows" | "linux"): DownloadLink {
   switch (platform) {
     case "macos":
-      return DOWNLOAD_LINKS.macos.universal;
+      return DOWNLOAD_LINKS.macos.arm64;
     case "windows":
-      return DOWNLOAD_LINKS.windows.msi;
+      return DOWNLOAD_LINKS.windows.exe;
     case "linux":
       return DOWNLOAD_LINKS.linux.appImage;
   }
@@ -124,20 +104,16 @@ export function getPlatformDownloads(platform: "macos" | "windows" | "linux"): D
   switch (platform) {
     case "macos":
       return [
-        DOWNLOAD_LINKS.macos.universal,
         DOWNLOAD_LINKS.macos.arm64,
         DOWNLOAD_LINKS.macos.x64,
       ];
     case "windows":
       return [
-        DOWNLOAD_LINKS.windows.msi,
         DOWNLOAD_LINKS.windows.exe,
       ];
     case "linux":
       return [
-        DOWNLOAD_LINKS.linux.appImage,
-        DOWNLOAD_LINKS.linux.deb,
-        DOWNLOAD_LINKS.linux.rpm,
+        DOWNLOAD_LINKS.linux.appImage
       ];
   }
 }

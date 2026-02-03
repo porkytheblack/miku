@@ -87,9 +87,8 @@ export function DownloadSection({ className = "" }: DownloadSectionProps) {
           {/* macOS */}
           <PlatformCard
             platform="macos"
-            primaryDownload={DOWNLOAD_LINKS.macos.universal}
+            primaryDownload={DOWNLOAD_LINKS.macos.arm64}
             alternativeDownloads={[
-              DOWNLOAD_LINKS.macos.arm64,
               DOWNLOAD_LINKS.macos.x64,
             ]}
           />
@@ -97,8 +96,8 @@ export function DownloadSection({ className = "" }: DownloadSectionProps) {
           {/* Windows */}
           <PlatformCard
             platform="windows"
-            primaryDownload={DOWNLOAD_LINKS.windows.msi}
-            alternativeDownloads={[DOWNLOAD_LINKS.windows.exe]}
+            primaryDownload={DOWNLOAD_LINKS.windows.exe}
+            alternativeDownloads={[]}
           />
 
           {/* Linux */}
@@ -106,8 +105,6 @@ export function DownloadSection({ className = "" }: DownloadSectionProps) {
             platform="linux"
             primaryDownload={DOWNLOAD_LINKS.linux.appImage}
             alternativeDownloads={[
-              DOWNLOAD_LINKS.linux.deb,
-              DOWNLOAD_LINKS.linux.rpm,
             ]}
           />
         </div>
