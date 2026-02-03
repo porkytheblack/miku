@@ -18,18 +18,14 @@ export interface DownloadLink {
 
 export interface PlatformDownloads {
   macos: {
-    universal: DownloadLink;
     arm64: DownloadLink;
     x64: DownloadLink;
   };
   windows: {
-    msi: DownloadLink;
     exe: DownloadLink;
   };
   linux: {
     appImage: DownloadLink;
-    deb: DownloadLink;
-    rpm: DownloadLink;
   };
 }
 
