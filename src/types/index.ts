@@ -183,3 +183,48 @@ export const DEFAULT_AGENT_CONFIG: Partial<DefaultAgentConfig> = {
   // API key should be set via environment variable for security
   apiKey: process.env.NEXT_PUBLIC_DEFAULT_AI_API_KEY || '',
 };
+
+// ============================================
+// Environment Variable Editor Types (.miku-env)
+// ============================================
+
+/**
+ * Represents a single environment variable with metadata
+ */
+export interface EnvVariable {
+  id: string;
+  key: string;
+  value: string;
+  comment?: string;
+  isSecret: boolean;  // Whether to mask the value in UI
+  group?: string;     // Optional grouping for organization
+}
+
+/**
+ * Metadata for a .miku-env document
+ */
+export interface MikuEnvMetadata {
+  name?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Complete .miku-env document structure
+ */
+export interface MikuEnvDocument {
+  version: string;
+  metadata: MikuEnvMetadata;
+  variables: EnvVariable[];
+}
+
+/**
+ * File type detection for the editor
+ */
+export type FileType = 'markdown' | 'miku-env';
+
+/**
+ * Export format options for env files
+ */
+export type EnvExportFormat = 'env' | 'json' | 'yaml';

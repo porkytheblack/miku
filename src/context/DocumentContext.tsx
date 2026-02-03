@@ -1,12 +1,13 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import { isTauri, safeTauriCall, openFile, saveFile, addRecentFile, getRecentFiles } from '@/lib/tauri';
 
 interface OpenDocument {
   id: string;
   path: string | null;
   content: string;
+  originalContent: string; // Content when file was opened or last saved
   isModified: boolean;
 }
 
@@ -22,12 +23,15 @@ interface DocumentContextType {
   openDocuments: OpenDocument[];
   activeDocumentId: string | null;
   setContent: (content: string) => void;
+  setOriginalContent: (content: string) => void;
   openDocument: (path?: string) => Promise<void>;
   saveDocument: (path?: string) => Promise<void>;
   newDoc: () => void;
   loadRecentFiles: () => Promise<void>;
-  switchToDocument: (id: string) => void;
-  closeDocument: (id: string) => void;
+  switchToDocument: (id: string, currentContent?: string) => void;
+  closeDocument: (id: string, currentContent?: string) => void;
+  registerContentGetter: (getter: () => string) => void;
+  getEditorContent: () => string;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -74,10 +78,26 @@ function slugify(text: string): string {
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
   const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>([
-    { id: generateDocId(), path: null, content: '', isModified: false }
+    { id: generateDocId(), path: null, content: '', originalContent: '', isModified: false }
   ]);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(openDocuments[0]?.id || null);
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
+
+  // Ref to hold the content getter function from BlockEditor
+  const contentGetterRef = useRef<(() => string) | null>(null);
+
+  const registerContentGetter = useCallback((getter: () => string) => {
+    contentGetterRef.current = getter;
+  }, []);
+
+  const getEditorContent = useCallback((): string => {
+    if (contentGetterRef.current) {
+      return contentGetterRef.current();
+    }
+    // Fallback to context content if no getter registered
+    const activeDoc = openDocuments.find(d => d.id === activeDocumentId);
+    return activeDoc?.content || '';
+  }, [openDocuments, activeDocumentId]);
 
   // Get the active document
   const activeDocument = openDocuments.find(d => d.id === activeDocumentId);
@@ -94,7 +114,25 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     if (!activeDocumentId) return;
     setOpenDocuments(prev => prev.map(doc =>
       doc.id === activeDocumentId
-        ? { ...doc, content, isModified: true }
+        ? {
+            ...doc,
+            content,
+            // Only mark as modified if content differs from original
+            // This properly handles undo back to original state
+            isModified: content !== doc.originalContent
+          }
+        : doc
+    ));
+  }, [activeDocumentId]);
+
+  // Update the original content baseline for the active document
+  // This is used by editors (like EnvEditor) that transform content during load,
+  // so the "original" baseline matches the serialized form rather than raw file content
+  const setOriginalContent = useCallback((content: string) => {
+    if (!activeDocumentId) return;
+    setOpenDocuments(prev => prev.map(doc =>
+      doc.id === activeDocumentId
+        ? { ...doc, originalContent: content }
         : doc
     ));
   }, [activeDocumentId]);
@@ -144,6 +182,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         id: generateDocId(),
         path: doc.path,
         content: doc.content,
+        originalContent: doc.content,
         isModified: false,
       };
 
@@ -197,7 +236,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
 
       setOpenDocuments(prev => prev.map(doc =>
         doc.id === activeDocumentId
-          ? { ...doc, path: filePath, isModified: false }
+          ? { ...doc, path: filePath, originalContent: doc.content, isModified: false }
           : doc
       ));
 
@@ -208,24 +247,66 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, [activeDocument, activeDocumentId, loadRecentFiles]);
 
   const newDoc = useCallback(() => {
+    // Save current document's content before switching to new document
+    const contentToSave = contentGetterRef.current ? contentGetterRef.current() : undefined;
+
     const newDocument: OpenDocument = {
       id: generateDocId(),
       path: null,
       content: '',
+      originalContent: '',
       isModified: false,
     };
-    setOpenDocuments(prev => [...prev, newDocument]);
+
+    setOpenDocuments(prev => {
+      // First, update the current document's content if we have any
+      let updated = prev;
+      if (activeDocumentId && contentToSave !== undefined) {
+        updated = prev.map(d =>
+          d.id === activeDocumentId
+            ? { ...d, content: contentToSave, isModified: contentToSave !== d.originalContent }
+            : d
+        );
+      }
+      // Then add the new document
+      return [...updated, newDocument];
+    });
+
     setActiveDocumentId(newDocument.id);
-  }, []);
+  }, [activeDocumentId]);
 
-  const switchToDocument = useCallback((id: string) => {
+  const switchToDocument = useCallback((id: string, currentContent?: string) => {
     const doc = openDocuments.find(d => d.id === id);
-    if (doc) {
-      setActiveDocumentId(id);
-    }
-  }, [openDocuments]);
+    if (!doc) return;
 
-  const closeDocument = useCallback((id: string) => {
+    // If no content provided, try to get it from the content getter
+    const contentToSave = currentContent ?? (contentGetterRef.current ? contentGetterRef.current() : undefined);
+
+    // Save current content to the old document before switching
+    if (activeDocumentId && contentToSave !== undefined) {
+      setOpenDocuments(prev => prev.map(d =>
+        d.id === activeDocumentId
+          ? { ...d, content: contentToSave, isModified: contentToSave !== d.originalContent }
+          : d
+      ));
+    }
+
+    setActiveDocumentId(id);
+  }, [openDocuments, activeDocumentId]);
+
+  const closeDocument = useCallback((id: string, currentContent?: string) => {
+    // If no content provided, try to get it from the content getter
+    const contentToSave = currentContent ?? (contentGetterRef.current ? contentGetterRef.current() : undefined);
+
+    // If closing a non-active document and we have current content, save it first
+    if (activeDocumentId && activeDocumentId !== id && contentToSave !== undefined) {
+      setOpenDocuments(prev => prev.map(d =>
+        d.id === activeDocumentId
+          ? { ...d, content: contentToSave, isModified: contentToSave !== d.originalContent }
+          : d
+      ));
+    }
+
     setOpenDocuments(prev => {
       const newDocs = prev.filter(d => d.id !== id);
 
@@ -238,6 +319,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
           id: generateDocId(),
           path: null,
           content: '',
+          originalContent: '',
           isModified: false,
         };
         setActiveDocumentId(emptyDoc.id);
@@ -255,12 +337,15 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         openDocuments,
         activeDocumentId,
         setContent,
+        setOriginalContent,
         openDocument,
         saveDocument,
         newDoc,
         loadRecentFiles,
         switchToDocument,
         closeDocument,
+        registerContentGetter,
+        getEditorContent,
       }}
     >
       {children}
