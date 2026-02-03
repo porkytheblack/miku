@@ -225,6 +225,43 @@ pub async fn create_folder(base_path: String, name: String) -> Result<String, Mi
     Ok(folder_path.to_string_lossy().to_string())
 }
 
+/// List environment files (.miku-env) in a workspace
+/// These are stored at the workspace root and are not included in the regular file listing
+#[tauri::command]
+pub async fn list_env_files(workspace_path: String) -> Result<Vec<WorkspaceFile>, MikuError> {
+    let path = Path::new(&workspace_path);
+
+    if !path.exists() {
+        return Err(MikuError::Path("Workspace path does not exist".to_string()));
+    }
+
+    let mut env_files = Vec::new();
+    let mut entries = tokio::fs::read_dir(path).await?;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let entry_path = entry.path();
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        // Only include .miku-env files
+        if file_name.ends_with(".miku-env") {
+            let metadata = entry.metadata().await?;
+            if metadata.is_file() {
+                env_files.push(WorkspaceFile {
+                    name: file_name,
+                    path: entry_path.to_string_lossy().to_string(),
+                    is_directory: false,
+                    children: None,
+                });
+            }
+        }
+    }
+
+    // Sort alphabetically
+    env_files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    Ok(env_files)
+}
+
 /// Delete a file or folder
 #[tauri::command]
 pub async fn delete_file(path: String) -> Result<(), MikuError> {

@@ -1,10 +1,22 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { isTauri } from '@/lib/tauri';
 
 export default function WorkspaceSelector() {
   const { workspace, selectWorkspace, openWorkspace, hasWorkspace } = useWorkspace();
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Wait for client-side hydration before checking isTauri
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Don't render during SSR to prevent hydration mismatch
+  if (!isMounted) {
+    return null;
+  }
 
   // Don't show in browser mode or if workspace is selected
   if (!isTauri() || hasWorkspace) {

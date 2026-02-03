@@ -173,12 +173,25 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
 
     // Update selected model to first available for new provider
-    const models = getModelsForProvider(selectedProvider);
+    // Inline the model selection logic to avoid dependency on getModelsForProvider
+    let models: AIModelOption[];
+    switch (selectedProvider) {
+      case 'openrouter':
+        models = OPENROUTER_MODELS;
+        break;
+      case 'ollama':
+      case 'lmstudio':
+        // When provider changes, localModels is reset to [], so use suggestions
+        models = LOCAL_LLM_MODELS.map(m => ({ ...m, provider: selectedProvider }));
+        break;
+      default:
+        models = AI_MODELS.filter(m => m.provider === selectedProvider);
+    }
     const currentModelInList = models.find(m => m.id === selectedModel);
     if (!currentModelInList && models.length > 0) {
       setSelectedModel(models[0].id);
     }
-  }, [selectedProvider, getModelsForProvider]);
+  }, [selectedProvider, selectedModel]);
 
   const handleSaveAPIConfig = () => {
     const apiKey = apiKeys[selectedProvider];

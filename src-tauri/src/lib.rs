@@ -38,6 +38,7 @@ pub fn run() {
             workspace::set_workspace,
             workspace::get_recent_workspaces,
             workspace::list_workspace_files,
+            workspace::list_env_files,
             workspace::create_file,
             workspace::create_folder,
             workspace::delete_file,
