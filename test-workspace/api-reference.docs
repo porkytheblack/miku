@@ -7,41 +7,41 @@
   "entries": [
     {
       "id": "api-001",
+      "type": "pasted",
       "title": "Getting Started",
       "content": "## Modding Overview\n\nEchoes of the Void supports modding through a Lua-based scripting API. Mods can:\n\n- Add new cards\n- Create custom enemies\n- Define new events\n- Modify game balance\n- Add cosmetic content\n\n### Mod Structure\n\n```\nMyMod/\n├── mod.json          # Mod metadata\n├── scripts/\n│   └── main.lua      # Entry point\n├── assets/\n│   ├── cards/        # Card artwork\n│   └── audio/        # Sound effects\n└── localization/\n    └── en.json       # English strings\n```\n\n### mod.json Format\n\n```json\n{\n  \"id\": \"my-cool-mod\",\n  \"name\": \"My Cool Mod\",\n  \"version\": \"1.0.0\",\n  \"author\": \"YourName\",\n  \"description\": \"Adds cool stuff\",\n  \"gameVersion\": \">=0.4.0\"\n}\n```",
-      "tags": ["api", "getting-started"],
       "createdAt": "2026-01-10T09:00:00Z",
       "updatedAt": "2026-01-25T14:00:00Z"
     },
     {
       "id": "api-002",
+      "type": "pasted",
       "title": "Card API",
       "content": "## Creating Custom Cards\n\n### RegisterCard(cardData)\n\nRegisters a new card with the game.\n\n```lua\nlocal myCard = {\n    id = \"mod_void_blast\",\n    name = \"Void Blast\",\n    description = \"Deal {damage} damage. If Void Meter > 50%, deal double.\",\n    type = CardType.ATTACK,\n    rarity = Rarity.RARE,\n    cost = 2,\n    damage = 8,\n    \n    onPlay = function(self, target, context)\n        local finalDamage = self.damage\n        if context.voidMeter > 50 then\n            finalDamage = finalDamage * 2\n        end\n        target:takeDamage(finalDamage)\n    end\n}\n\nAPI.RegisterCard(myCard)\n```\n\n### Card Properties\n\n| Property | Type | Description |\n|----------|------|-------------|\n| id | string | Unique identifier |\n| name | string | Display name |\n| description | string | Card text (supports {variable} syntax) |\n| type | CardType | ATTACK, DEFENSE, SKILL, VOID |\n| rarity | Rarity | COMMON, UNCOMMON, RARE, VOID_TOUCHED |\n| cost | number | Energy cost |\n| damage | number | Base damage (optional) |\n| block | number | Base block (optional) |\n\n### Lifecycle Hooks\n\n- `onPlay(self, target, context)` - When card is played\n- `onDraw(self, context)` - When drawn into hand\n- `onDiscard(self, context)` - When discarded\n- `onExhaust(self, context)` - When exhausted",
-      "tags": ["api", "cards"],
       "createdAt": "2026-01-12T11:00:00Z",
       "updatedAt": "2026-01-28T10:30:00Z"
     },
     {
       "id": "api-003",
+      "type": "pasted",
       "title": "Enemy API",
       "content": "## Creating Custom Enemies\n\n### RegisterEnemy(enemyData)\n\n```lua\nlocal myEnemy = {\n    id = \"mod_shadow_lurker\",\n    name = \"Shadow Lurker\",\n    maxHealth = 45,\n    sprite = \"assets/enemies/shadow_lurker.png\",\n    \n    intents = {\n        attack = { type = IntentType.ATTACK, damage = 12 },\n        buff = { type = IntentType.BUFF },\n        debuff = { type = IntentType.DEBUFF }\n    },\n    \n    onTurnStart = function(self, context)\n        -- Choose next intent based on AI logic\n        if self.health < self.maxHealth * 0.3 then\n            self:setIntent(\"buff\")\n        else\n            self:setIntent(\"attack\")\n        end\n    end,\n    \n    onIntentExecute = function(self, intent, context)\n        if intent == \"attack\" then\n            context.player:takeDamage(12)\n        elseif intent == \"buff\" then\n            self:applyStatus(Status.STRENGTH, 2)\n        end\n    end\n}\n\nAPI.RegisterEnemy(myEnemy)\n```\n\n### Intent Types\n\n- `ATTACK` - Shows sword icon with damage number\n- `DEFEND` - Shows shield icon\n- `BUFF` - Shows up arrow\n- `DEBUFF` - Shows down arrow\n- `UNKNOWN` - Shows question mark\n- `SPECIAL` - Custom icon",
-      "tags": ["api", "enemies"],
       "createdAt": "2026-01-14T14:00:00Z",
       "updatedAt": "2026-01-30T09:15:00Z"
     },
     {
       "id": "api-004",
+      "type": "pasted",
       "title": "Event API",
       "content": "## Creating Custom Events\n\nEvents are story encounters with player choices.\n\n### RegisterEvent(eventData)\n\n```lua\nlocal myEvent = {\n    id = \"mod_mysterious_merchant\",\n    name = \"Mysterious Merchant\",\n    description = \"A cloaked figure emerges from the shadows, wares jingling softly.\",\n    image = \"assets/events/merchant.png\",\n    \n    choices = {\n        {\n            text = \"Browse wares (Costs 50 gold)\",\n            condition = function(ctx) return ctx.gold >= 50 end,\n            effect = function(ctx)\n                ctx:spendGold(50)\n                ctx:showCardReward(3, Rarity.RARE)\n            end\n        },\n        {\n            text = \"Demand tribute\",\n            effect = function(ctx)\n                if math.random() < 0.5 then\n                    ctx:gainGold(75)\n                    ctx:showMessage(\"The merchant reluctantly hands over gold.\")\n                else\n                    ctx:startCombat(\"mod_angry_merchant\")\n                end\n            end\n        },\n        {\n            text = \"Leave\",\n            effect = function(ctx)\n                ctx:showMessage(\"You walk away into the void.\")\n            end\n        }\n    }\n}\n\nAPI.RegisterEvent(myEvent)\n```\n\n### Event Conditions\n\nEvents can have spawn conditions:\n\n```lua\nmyEvent.spawnCondition = function(ctx)\n    return ctx.currentSector >= 2 and not ctx:hasSeenEvent(\"mod_mysterious_merchant\")\nend\n```",
-      "tags": ["api", "events"],
       "createdAt": "2026-01-18T10:00:00Z",
       "updatedAt": "2026-01-29T16:45:00Z"
     },
     {
       "id": "api-005",
+      "type": "pasted",
       "title": "Hooks & Events",
       "content": "## Game Hooks\n\nSubscribe to game events for reactive modding.\n\n### Available Hooks\n\n```lua\n-- Combat hooks\nAPI.OnCombatStart(function(enemies)\n    print(\"Combat started with \" .. #enemies .. \" enemies\")\nend)\n\nAPI.OnCombatEnd(function(victory)\n    if victory then\n        print(\"Player won!\")\n    end\nend)\n\nAPI.OnTurnStart(function(turnNumber)\n    print(\"Turn \" .. turnNumber)\nend)\n\n-- Card hooks\nAPI.OnCardPlayed(function(card, target)\n    print(card.name .. \" played\")\nend)\n\nAPI.OnCardDrawn(function(card)\n    -- Modify cards as they're drawn\nend)\n\n-- Player hooks\nAPI.OnPlayerDamaged(function(amount, source)\n    print(\"Player took \" .. amount .. \" damage\")\nend)\n\nAPI.OnGoldChanged(function(oldAmount, newAmount)\n    print(\"Gold: \" .. oldAmount .. \" -> \" .. newAmount)\nend)\n\n-- Meta hooks\nAPI.OnRunStart(function(character)\n    print(\"New run with \" .. character.name)\nend)\n\nAPI.OnRunEnd(function(victory, stats)\n    print(\"Run ended. Victory: \" .. tostring(victory))\nend)\n```\n\n### Removing Hooks\n\n```lua\nlocal hookId = API.OnTurnStart(myFunction)\nAPI.RemoveHook(hookId)\n```",
-      "tags": ["api", "hooks", "events"],
       "createdAt": "2026-01-20T13:00:00Z",
       "updatedAt": "2026-02-01T11:00:00Z"
     }
