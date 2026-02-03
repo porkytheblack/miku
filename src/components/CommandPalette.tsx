@@ -23,6 +23,8 @@ interface CommandPaletteProps {
   onToggleSettings?: () => void;
   onToggleHelp?: () => void;
   onRequestEnvFileName?: () => void;
+  onRequestKanbanFileName?: () => void;
+  onRequestDocsFileName?: () => void;
 }
 
 const categoryLabels: Record<Command['category'], string> = {
@@ -91,6 +93,8 @@ export default function CommandPalette({
   onToggleSettings,
   onToggleHelp,
   onRequestEnvFileName,
+  onRequestKanbanFileName,
+  onRequestDocsFileName,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -160,6 +164,44 @@ export default function CommandPalette({
             <rect x="4" y="10" width="16" height="11" rx="2" />
             <path d="M8 10V7a4 4 0 118 0v3" />
             <circle cx="12" cy="16" r="1" fill="currentColor" />
+          </svg>
+        ),
+      },
+      {
+        id: 'file.newKanban',
+        label: 'New Kanban Board',
+        category: 'file',
+        action: () => {
+          if (workspace.currentWorkspace && onRequestKanbanFileName) {
+            onRequestKanbanFileName();
+          }
+        },
+        keywords: ['create', 'new', 'kanban', 'board', 'tasks', 'todo', 'project'],
+        icon: (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+            <line x1="15" y1="3" x2="15" y2="21" />
+          </svg>
+        ),
+      },
+      {
+        id: 'file.newDocs',
+        label: 'New Documentation Collection',
+        category: 'file',
+        action: () => {
+          if (workspace.currentWorkspace && onRequestDocsFileName) {
+            onRequestDocsFileName();
+          }
+        },
+        keywords: ['create', 'new', 'docs', 'documentation', 'readme', 'github', 'markdown'],
+        icon: (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            <line x1="8" y1="7" x2="16" y2="7" />
+            <line x1="8" y1="11" x2="16" y2="11" />
+            <line x1="8" y1="15" x2="12" y2="15" />
           </svg>
         ),
       },

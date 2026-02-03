@@ -1,0 +1,67 @@
+#!miku-env
+# Production Environment Configuration
+# Echoes of the Void - Release Build
+
+# ===================
+# Core Settings
+# ===================
+GAME_ENV=production
+DEBUG_MODE=false
+LOG_LEVEL=error
+SHOW_FPS=false
+SHOW_DEBUG_OVERLAY=false
+
+# ===================
+# Build Configuration
+# ===================
+BUILD_TARGET=all
+ENABLE_HOT_RELOAD=false
+ASSET_COMPRESSION=true
+SKIP_INTRO=false
+
+# ===================
+# Gameplay
+# ===================
+STARTING_GOLD=0
+UNLOCK_ALL_CARDS=false
+INVINCIBLE_MODE=false
+SKIP_TUTORIALS=false
+
+# ===================
+# Steam Integration
+# ===================
+STEAM_APP_ID=2847291
+STEAM_ENABLED=true
+STEAM_OVERLAY_DISABLED=false
+STEAM_CLOUD_SAVES=true
+STEAM_ACHIEVEMENTS=true
+
+# ===================
+# Analytics
+# ===================
+ANALYTICS_ENABLED=true
+CRASH_REPORTING=true
+TELEMETRY_ENDPOINT=https://telemetry.echoesofthevoid.com/v1/events
+GDPR_CONSENT_REQUIRED=true
+
+# ===================
+# Audio
+# ===================
+FMOD_LIVE_UPDATE=false
+MASTER_VOLUME=1.0
+MUSIC_VOLUME=0.7
+
+# ===================
+# Paths
+# ===================
+SAVE_DIRECTORY=%APPDATA%/EchoesOfTheVoid/saves
+ASSET_PATH=./assets
+MOD_DIRECTORY=%APPDATA%/EchoesOfTheVoid/mods
+LOG_PATH=%APPDATA%/EchoesOfTheVoid/logs/game.log
+
+# ===================
+# Security
+# ===================
+ANTI_CHEAT_ENABLED=true
+SAVE_ENCRYPTION=true
+VALIDATE_ASSETS=true

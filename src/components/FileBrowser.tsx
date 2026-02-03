@@ -72,6 +72,23 @@ const FileIcons = {
       <path d="M10 2v3h3" stroke="var(--text-tertiary)" strokeWidth="1.5" fill="none" />
     </svg>
   ),
+  // Kanban board file
+  kanban: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="var(--accent-primary)" strokeWidth="1.5" fill="var(--accent-subtle)" />
+      <line x1="6" y1="2" x2="6" y2="14" stroke="var(--accent-primary)" strokeWidth="1" />
+      <line x1="10" y1="2" x2="10" y2="14" stroke="var(--accent-primary)" strokeWidth="1" />
+    </svg>
+  ),
+  // Documentation collection file
+  docs: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M3 13V3C3 2.44772 3.44772 2 4 2H12V14H4C3.44772 14 3 13.5523 3 13Z" fill="var(--accent-subtle)" stroke="var(--accent-primary)" strokeWidth="1.5" />
+      <path d="M3 13C3 12.4477 3.44772 12 4 12H12" stroke="var(--accent-primary)" strokeWidth="1.5" />
+      <line x1="5.5" y1="5" x2="10" y2="5" stroke="var(--accent-primary)" strokeWidth="1" strokeLinecap="round" />
+      <line x1="5.5" y1="7.5" x2="9" y2="7.5" stroke="var(--accent-primary)" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  ),
   // Chevron for folder expand/collapse
   chevron: (isExpanded: boolean) => (
     <svg
@@ -97,6 +114,12 @@ const getFileIcon = (file: WorkspaceFile, isExpanded: boolean = false) => {
   }
   if (file.name.endsWith('.miku-env') || file.name.endsWith('.mikuenv')) {
     return FileIcons.envFile;
+  }
+  if (file.name.endsWith('.kanban') || file.name.endsWith('.miku-kanban')) {
+    return FileIcons.kanban;
+  }
+  if (file.name.endsWith('.docs') || file.name.endsWith('.miku-docs')) {
+    return FileIcons.docs;
   }
   if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
     return FileIcons.markdown;

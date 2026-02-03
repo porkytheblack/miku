@@ -11,9 +11,9 @@
     "dialog:allow-message",
     "dialog:allow-ask",
     "fs:default",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
-    "fs:allow-exists",
+    "fs:allow-app-read-recursive",
+    "fs:allow-app-write-recursive",
+    "fs:create-app-specific-dirs",
     "shell:allow-open",
     "updater:default"
   ]

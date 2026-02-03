@@ -1,0 +1,133 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Development Roadmap",
+    "description": "Echoes of the Void - milestone tracking"
+  },
+  "columns": [
+    {
+      "id": "col-backlog",
+      "title": "Backlog",
+      "cards": [
+        {
+          "id": "card-001",
+          "title": "Implement meta-progression system",
+          "description": "Players should unlock permanent upgrades between runs. Consider: starting deck modifications, passive abilities, cosmetic unlocks.",
+          "tasks": [
+            { "id": "task-001", "text": "Design unlock tree structure", "state": "done" },
+            { "id": "task-002", "text": "Implement persistence layer", "state": "todo" },
+            { "id": "task-003", "text": "Create unlock UI", "state": "todo" },
+            { "id": "task-004", "text": "Balance unlock costs", "state": "todo" }
+          ],
+          "color": "purple"
+        },
+        {
+          "id": "card-002",
+          "title": "Add 4th enemy type: Memory Devourer",
+          "description": "Boss-tier enemy that can steal cards from your hand temporarily. Appears at the end of each sector.",
+          "tasks": [
+            { "id": "task-005", "text": "Design enemy mechanics", "state": "done" },
+            { "id": "task-006", "text": "Commission sprite art", "state": "todo" },
+            { "id": "task-007", "text": "Implement AI behavior", "state": "todo" }
+          ],
+          "color": "red"
+        },
+        {
+          "id": "card-003",
+          "title": "Localization support",
+          "description": "Prepare for translations. Need to externalize all strings.",
+          "tasks": [],
+          "color": "gray"
+        }
+      ]
+    },
+    {
+      "id": "col-sprint",
+      "title": "Current Sprint",
+      "cards": [
+        {
+          "id": "card-004",
+          "title": "Fix audio memory leak",
+          "description": "Audio cuts out after ~20 minutes of play. Suspect FMOD event instances aren't being released properly.",
+          "tasks": [
+            { "id": "task-008", "text": "Profile memory usage during play", "state": "done" },
+            { "id": "task-009", "text": "Identify leaking instances", "state": "done" },
+            { "id": "task-010", "text": "Implement proper cleanup", "state": "in-progress" },
+            { "id": "task-011", "text": "Test fix over extended session", "state": "todo" }
+          ],
+          "color": "red"
+        },
+        {
+          "id": "card-005",
+          "title": "Memory Convergence UI",
+          "description": "Replace placeholder UI for combining memories. Should feel magical and satisfying.",
+          "tasks": [
+            { "id": "task-012", "text": "Design mockups", "state": "done" },
+            { "id": "task-013", "text": "Implement drag-drop combining", "state": "in-progress" },
+            { "id": "task-014", "text": "Add particle effects", "state": "todo" },
+            { "id": "task-015", "text": "Sound design pass", "state": "todo" }
+          ],
+          "color": "blue"
+        },
+        {
+          "id": "card-006",
+          "title": "Playtest session prep",
+          "description": "Getting ready for the Discord playtest on Feb 5th",
+          "tasks": [
+            { "id": "task-016", "text": "Build Windows executable", "state": "done" },
+            { "id": "task-017", "text": "Build macOS executable", "state": "done" },
+            { "id": "task-018", "text": "Write playtest instructions", "state": "in-progress" },
+            { "id": "task-019", "text": "Set up feedback form", "state": "todo" }
+          ],
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "id": "col-review",
+      "title": "In Review",
+      "cards": [
+        {
+          "id": "card-007",
+          "title": "New card: Stellar Remnant",
+          "description": "Rare memory card that deals damage equal to your current Void level. High risk, high reward.",
+          "tasks": [
+            { "id": "task-020", "text": "Implement card effect", "state": "done" },
+            { "id": "task-021", "text": "Add card art", "state": "done" },
+            { "id": "task-022", "text": "Balance testing", "state": "done" },
+            { "id": "task-023", "text": "QA pass", "state": "in-progress" }
+          ],
+          "color": "orange"
+        }
+      ]
+    },
+    {
+      "id": "col-done",
+      "title": "Done",
+      "cards": [
+        {
+          "id": "card-008",
+          "title": "Save system v2",
+          "description": "Migrated to new save format with better backwards compatibility.",
+          "tasks": [
+            { "id": "task-024", "text": "Design new save schema", "state": "done" },
+            { "id": "task-025", "text": "Implement migration tool", "state": "done" },
+            { "id": "task-026", "text": "Test edge cases", "state": "done" }
+          ],
+          "color": "green"
+        },
+        {
+          "id": "card-009",
+          "title": "Controller support",
+          "description": "Full gamepad navigation for Steam Deck compatibility.",
+          "tasks": [
+            { "id": "task-027", "text": "Input rebinding", "state": "done" },
+            { "id": "task-028", "text": "UI navigation", "state": "done" },
+            { "id": "task-029", "text": "Rumble feedback", "state": "done" }
+          ],
+          "color": "green"
+        }
+      ]
+    }
+  ]
+}
