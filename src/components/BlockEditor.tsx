@@ -9,6 +9,7 @@ import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPositi
 import { handleSmartFormatting, handleCharacterInput, shouldAutoPair } from '@/lib/markdown/SmartFormatting';
 import { toggleFormatting } from '@/lib/markdown/markdownUtils';
 import { highlightMarkdownSyntax } from '@/components/markdown/MarkdownSyntaxHighlighter';
+import { useKeyboardSounds } from '@/hooks/useKeyboardSounds';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 
@@ -60,6 +61,9 @@ export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
   const { setContent: setDocContent, activeDocumentId, registerContentGetter, openDocuments } = useDocument();
+
+  // Keyboard sounds integration
+  const { playKeySound } = useKeyboardSounds();
 
   // ============================================
   // State declarations - all state must be declared before effects
@@ -437,6 +441,19 @@ export default function BlockEditor() {
     const selectionStart = textarea.selectionStart;
     const selectionEnd = textarea.selectionEnd;
 
+    // Play keyboard sound for typing keys (non-modifier keys)
+    // Sound plays for all character keys, Enter, Space, and Backspace
+    // Modifier-only keys (Cmd, Ctrl, Shift, Alt) don't trigger sounds
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      const key = e.key;
+      // Check if it's a key that should produce a sound
+      // Single characters, Enter, Space, Backspace
+      if (key.length === 1 || key === 'Enter' || key === 'Backspace') {
+        // Use e.code for scancode-based sound mapping (MechVibes compatible)
+        playKeySound('keydown', e.code);
+      }
+    }
+
     // Handle Cmd+Enter for manual review
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -588,7 +605,7 @@ export default function BlockEditor() {
         return;
       }
     }
-  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview, setContent, insertSlashCommand]);
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview, setContent, insertSlashCommand, playKeySound]);
 
   const handleHighlightClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;

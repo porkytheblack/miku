@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { EditorSettings } from '@/types';
+import { EditorSettings, DEFAULT_KEYBOARD_SOUND_SETTINGS } from '@/types';
 import { isTauri, loadSettings, saveSettings, toBackendSettings, toFrontendSettings } from '@/lib/tauri';
 
 interface SettingsContextType {
@@ -20,6 +20,7 @@ const defaultSettings: EditorSettings = {
   aggressiveness: 'balanced',
   writingContext: '',
   soundEnabled: true,
+  keyboardSounds: DEFAULT_KEYBOARD_SOUND_SETTINGS,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

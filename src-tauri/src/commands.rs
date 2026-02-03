@@ -21,6 +21,50 @@ impl Serialize for MikuError {
     }
 }
 
+/// Keyboard sound settings for typing sounds feature
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KeyboardSoundSettings {
+    /// Whether keyboard sounds are enabled
+    #[serde(default)]
+    pub enabled: bool,
+    /// Sound profile ID (cherry-mx-blue, cherry-mx-brown, topre)
+    #[serde(default = "default_profile_id")]
+    pub profile_id: String,
+    /// Master volume (0.0 - 1.0)
+    #[serde(default = "default_volume")]
+    pub volume: f32,
+    /// Whether to play keyup sounds
+    #[serde(default)]
+    pub play_keyup_sounds: bool,
+    /// Pitch variation range (0.0 - 0.1)
+    #[serde(default = "default_pitch_variation")]
+    pub pitch_variation: f32,
+}
+
+fn default_profile_id() -> String {
+    "cherry-mx-blue".to_string()
+}
+
+fn default_volume() -> f32 {
+    0.5
+}
+
+fn default_pitch_variation() -> f32 {
+    0.02
+}
+
+impl Default for KeyboardSoundSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            profile_id: default_profile_id(),
+            volume: default_volume(),
+            play_keyup_sounds: false,
+            pitch_variation: default_pitch_variation(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EditorSettings {
     pub theme: String,
@@ -33,6 +77,8 @@ pub struct EditorSettings {
     pub writing_context: String,
     #[serde(default = "default_sound_enabled")]
     pub sound_enabled: bool,
+    #[serde(default)]
+    pub keyboard_sounds: KeyboardSoundSettings,
 }
 
 fn default_sound_enabled() -> bool {
@@ -51,6 +97,7 @@ impl Default for EditorSettings {
             aggressiveness: "balanced".to_string(),
             writing_context: String::new(),
             sound_enabled: true,
+            keyboard_sounds: KeyboardSoundSettings::default(),
         }
     }
 }
@@ -186,6 +233,12 @@ mod tests {
         assert_eq!(settings.aggressiveness, "balanced");
         assert!(settings.writing_context.is_empty());
         assert!(settings.sound_enabled);
+        // Keyboard sounds defaults
+        assert!(!settings.keyboard_sounds.enabled);
+        assert_eq!(settings.keyboard_sounds.profile_id, "cherry-mx-blue");
+        assert_eq!(settings.keyboard_sounds.volume, 0.5);
+        assert!(!settings.keyboard_sounds.play_keyup_sounds);
+        assert_eq!(settings.keyboard_sounds.pitch_variation, 0.02);
     }
 
     #[test]

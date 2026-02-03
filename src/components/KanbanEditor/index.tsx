@@ -305,6 +305,7 @@ function KanbanEditorInner({ initialContent, onContentChange }: KanbanEditorInne
             flex: 1,
             overflow: 'auto',
             padding: 'var(--spacing-4)',
+            paddingBottom: '100px', // Extra space at bottom for floating bar
           }}
         >
           <div

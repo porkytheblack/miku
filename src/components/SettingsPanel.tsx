@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
 import { Theme, AIProvider, AI_MODELS, OPENROUTER_MODELS, LOCAL_LLM_MODELS, AIModelOption, ReviewMode, AggressivenessLevel } from '@/types';
+import { useKeyboardSounds } from '@/hooks/useKeyboardSounds';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -28,6 +29,7 @@ const PROVIDER_NAMES: Record<AIProvider, string> = {
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { settings, updateSettings } = useSettings();
   const { setAIConfig, aiConfig } = useMiku();
+  const { profiles: keyboardSoundProfiles } = useKeyboardSounds();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Local state for API keys (not saved until Apply is clicked)
@@ -782,6 +784,207 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 Play a sound when Miku finishes reviewing your writing.
               </p>
             </div>
+          </section>
+
+          {/* Keyboard Sounds section */}
+          <section>
+            <h3
+              className="mb-3"
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-medium)',
+              }}
+            >
+              Keyboard Sounds
+            </h3>
+
+            {/* Enable/Disable Toggle */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between">
+                <label
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  Enable Keyboard Sounds
+                </label>
+                <button
+                  onClick={() => updateSettings({
+                    keyboardSounds: {
+                      ...settings.keyboardSounds,
+                      enabled: !settings.keyboardSounds.enabled,
+                    },
+                  })}
+                  className="relative w-11 h-6 rounded-full transition-colors"
+                  style={{
+                    background: settings.keyboardSounds.enabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-default)',
+                  }}
+                  aria-label={settings.keyboardSounds.enabled ? 'Disable keyboard sounds' : 'Enable keyboard sounds'}
+                >
+                  <span
+                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
+                    style={{
+                      background: 'white',
+                      transform: settings.keyboardSounds.enabled ? 'translateX(20px)' : 'translateX(0)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }}
+                  />
+                </button>
+              </div>
+              <p
+                className="mt-1"
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--text-xs)',
+                }}
+              >
+                Play mechanical keyboard sounds while typing.
+              </p>
+            </div>
+
+            {/* Sound Profile Selector - only show when enabled */}
+            {settings.keyboardSounds.enabled && (
+              <>
+                <div className="mb-4">
+                  <label
+                    className="block mb-2"
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    Sound Profile
+                  </label>
+                  <select
+                    value={settings.keyboardSounds.profileId}
+                    onChange={e => updateSettings({
+                      keyboardSounds: {
+                        ...settings.keyboardSounds,
+                        profileId: e.target.value,
+                      },
+                    })}
+                    className="w-full p-2 rounded"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                    disabled={keyboardSoundProfiles.length === 0}
+                  >
+                    {keyboardSoundProfiles.length === 0 ? (
+                      <option value="">No sound packs installed</option>
+                    ) : (
+                      keyboardSoundProfiles.map(profile => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {keyboardSoundProfiles.length === 0 && (
+                    <p
+                      className="mt-1"
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: 'var(--text-xs)',
+                      }}
+                    >
+                      Add MechVibes sound packs to /public/sounds/keyboards/
+                    </p>
+                  )}
+                </div>
+
+                {/* Volume Slider */}
+                <div className="mb-4">
+                  <label
+                    className="flex justify-between mb-2"
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-sm)',
+                    }}
+                  >
+                    <span>Volume</span>
+                    <span style={{ color: 'var(--text-primary)' }}>
+                      {Math.round(settings.keyboardSounds.volume * 100)}%
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={settings.keyboardSounds.volume * 100}
+                    onChange={e => updateSettings({
+                      keyboardSounds: {
+                        ...settings.keyboardSounds,
+                        volume: Number(e.target.value) / 100,
+                      },
+                    })}
+                    className="w-full"
+                    style={{ accentColor: 'var(--accent-primary)' }}
+                  />
+                </div>
+
+                {/* Keyup Sounds Toggle */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <label
+                      style={{
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: 'var(--text-sm)',
+                      }}
+                    >
+                      Play Key Release Sounds
+                    </label>
+                    <button
+                      onClick={() => updateSettings({
+                        keyboardSounds: {
+                          ...settings.keyboardSounds,
+                          playKeyupSounds: !settings.keyboardSounds.playKeyupSounds,
+                        },
+                      })}
+                      className="relative w-11 h-6 rounded-full transition-colors"
+                      style={{
+                        background: settings.keyboardSounds.playKeyupSounds ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                        border: '1px solid var(--border-default)',
+                      }}
+                      aria-label={settings.keyboardSounds.playKeyupSounds ? 'Disable keyup sounds' : 'Enable keyup sounds'}
+                    >
+                      <span
+                        className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
+                        style={{
+                          background: 'white',
+                          transform: settings.keyboardSounds.playKeyupSounds ? 'translateX(20px)' : 'translateX(0)',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }}
+                      />
+                    </button>
+                  </div>
+                  <p
+                    className="mt-1"
+                    style={{
+                      color: 'var(--text-tertiary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    Play additional sound when keys are released.
+                  </p>
+                </div>
+              </>
+            )}
           </section>
 
           {/* Appearance section */}

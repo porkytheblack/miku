@@ -17,6 +17,59 @@ export interface Suggestion {
 export type ReviewMode = 'manual' | 'auto';
 export type AggressivenessLevel = 'gentle' | 'balanced' | 'strict';
 
+/**
+ * Keyboard sound profile ID.
+ * Any string is valid - profiles are discovered dynamically from /public/sounds/keyboards/
+ */
+export type KeyboardSoundProfileId = string;
+
+/**
+ * User preferences for keyboard sounds.
+ * Persisted in EditorSettings.
+ */
+export interface KeyboardSoundSettings {
+  /** Whether keyboard sounds are enabled */
+  enabled: boolean;
+
+  /** Selected sound profile ID (folder name in /public/sounds/keyboards/) */
+  profileId: string;
+
+  /** Master volume (0.0 - 1.0) */
+  volume: number;
+
+  /** Whether to play keyup sounds */
+  playKeyupSounds: boolean;
+
+  /**
+   * Pitch variation range (0.0 - 0.1 recommended).
+   * Adds subtle pitch randomization for natural feel.
+   * 0 = no variation, 0.05 = +/- 5% pitch variation.
+   */
+  pitchVariation: number;
+}
+
+/**
+ * Default keyboard sound settings.
+ * Feature is opt-in (disabled by default).
+ */
+export const DEFAULT_KEYBOARD_SOUND_SETTINGS: KeyboardSoundSettings = {
+  enabled: false,
+  profileId: '',  // Will use first available profile
+  volume: 0.5,
+  playKeyupSounds: false,
+  pitchVariation: 0.02,
+};
+
+/**
+ * Metadata for a keyboard sound profile.
+ * Used for UI display in settings.
+ */
+export interface KeyboardSoundProfileInfo {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface EditorSettings {
   theme: Theme;
   fontSize: number;
@@ -27,6 +80,7 @@ export interface EditorSettings {
   aggressiveness: AggressivenessLevel;
   writingContext: string;
   soundEnabled: boolean;
+  keyboardSounds: KeyboardSoundSettings;
 }
 
 export type MikuStatus = 'idle' | 'thinking' | 'ready' | 'error';

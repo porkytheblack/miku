@@ -1,6 +1,8 @@
 // File operations module for Miku
 // This module contains additional file operation utilities
 
+#![allow(dead_code)]
+
 use std::path::Path;
 
 /// Check if a file exists

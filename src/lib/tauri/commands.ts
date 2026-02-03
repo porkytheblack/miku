@@ -5,6 +5,17 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+/**
+ * Keyboard sound settings (snake_case for Rust backend)
+ */
+export interface KeyboardSoundSettingsBackend {
+  enabled: boolean;
+  profile_id: string;
+  volume: number;
+  play_keyup_sounds: boolean;
+  pitch_variation: number;
+}
+
 export interface EditorSettings {
   theme: string;
   font_size: number;
@@ -15,6 +26,7 @@ export interface EditorSettings {
   aggressiveness: string;
   writing_context: string;
   sound_enabled: boolean;
+  keyboard_sounds: KeyboardSoundSettingsBackend;
 }
 
 export interface Document {
@@ -104,6 +116,13 @@ export function toBackendSettings(settings: {
   aggressiveness: string;
   writingContext: string;
   soundEnabled: boolean;
+  keyboardSounds: {
+    enabled: boolean;
+    profileId: string;
+    volume: number;
+    playKeyupSounds: boolean;
+    pitchVariation: number;
+  };
 }): EditorSettings {
   return {
     theme: settings.theme,
@@ -115,6 +134,13 @@ export function toBackendSettings(settings: {
     aggressiveness: settings.aggressiveness,
     writing_context: settings.writingContext,
     sound_enabled: settings.soundEnabled,
+    keyboard_sounds: {
+      enabled: settings.keyboardSounds.enabled,
+      profile_id: settings.keyboardSounds.profileId,
+      volume: settings.keyboardSounds.volume,
+      play_keyup_sounds: settings.keyboardSounds.playKeyupSounds,
+      pitch_variation: settings.keyboardSounds.pitchVariation,
+    },
   };
 }
 
@@ -131,7 +157,24 @@ export function toFrontendSettings(settings: EditorSettings): {
   aggressiveness: 'gentle' | 'balanced' | 'strict';
   writingContext: string;
   soundEnabled: boolean;
+  keyboardSounds: {
+    enabled: boolean;
+    profileId: 'cherry-mx-blue' | 'cherry-mx-brown' | 'topre';
+    volume: number;
+    playKeyupSounds: boolean;
+    pitchVariation: number;
+  };
 } {
+  // Provide defaults for keyboard sounds in case they're missing from old settings
+  const keyboardSoundsDefaults = {
+    enabled: false,
+    profile_id: 'cherry-mx-blue',
+    volume: 0.5,
+    play_keyup_sounds: false,
+    pitch_variation: 0.02,
+  };
+  const keyboardSounds = settings.keyboard_sounds ?? keyboardSoundsDefaults;
+
   return {
     theme: settings.theme as 'light' | 'dark' | 'system',
     fontSize: settings.font_size,
@@ -142,6 +185,13 @@ export function toFrontendSettings(settings: EditorSettings): {
     aggressiveness: settings.aggressiveness as 'gentle' | 'balanced' | 'strict',
     writingContext: settings.writing_context,
     soundEnabled: settings.sound_enabled ?? true,
+    keyboardSounds: {
+      enabled: keyboardSounds.enabled,
+      profileId: keyboardSounds.profile_id as 'cherry-mx-blue' | 'cherry-mx-brown' | 'topre',
+      volume: keyboardSounds.volume,
+      playKeyupSounds: keyboardSounds.play_keyup_sounds,
+      pitchVariation: keyboardSounds.pitch_variation,
+    },
   };
 }
 

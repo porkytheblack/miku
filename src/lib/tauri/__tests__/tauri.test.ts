@@ -75,6 +75,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'strict',
         writingContext: 'technical documentation',
         soundEnabled: true,
+        keyboardSounds: {
+          enabled: true,
+          profileId: 'cherry-mx-blue',
+          volume: 0.7,
+          playKeyupSounds: true,
+          pitchVariation: 0.05,
+        },
       };
 
       const result = toBackendSettings(frontendSettings);
@@ -89,6 +96,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'strict',
         writing_context: 'technical documentation',
         sound_enabled: true,
+        keyboard_sounds: {
+          enabled: true,
+          profile_id: 'cherry-mx-blue',
+          volume: 0.7,
+          play_keyup_sounds: true,
+          pitch_variation: 0.05,
+        },
       });
     });
 
@@ -103,6 +117,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'balanced',
         writingContext: '',
         soundEnabled: true,
+        keyboardSounds: {
+          enabled: false,
+          profileId: 'cherry-mx-blue',
+          volume: 0.5,
+          playKeyupSounds: false,
+          pitchVariation: 0.02,
+        },
       };
 
       const result = toBackendSettings(frontendSettings);
@@ -123,6 +144,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'strict',
         writing_context: 'blog post',
         sound_enabled: true,
+        keyboard_sounds: {
+          enabled: true,
+          profile_id: 'topre',
+          volume: 0.8,
+          play_keyup_sounds: true,
+          pitch_variation: 0.03,
+        },
       };
 
       const result = toFrontendSettings(backendSettings);
@@ -137,6 +165,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'strict',
         writingContext: 'blog post',
         soundEnabled: true,
+        keyboardSounds: {
+          enabled: true,
+          profileId: 'topre',
+          volume: 0.8,
+          playKeyupSounds: true,
+          pitchVariation: 0.03,
+        },
       });
     });
 
@@ -151,11 +186,43 @@ describe('Tauri utilities', () => {
         aggressiveness: 'balanced',
         writing_context: '',
         sound_enabled: false,
+        keyboard_sounds: {
+          enabled: false,
+          profile_id: 'cherry-mx-blue',
+          volume: 0.5,
+          play_keyup_sounds: false,
+          pitch_variation: 0.02,
+        },
       };
 
       const result = toFrontendSettings(backendSettings);
 
       expect(result.theme).toBe('system');
+    });
+
+    it('provides default keyboard sounds when missing from backend', () => {
+      // Simulate old settings without keyboard_sounds field
+      const backendSettings = {
+        theme: 'light',
+        font_size: 16,
+        line_height: 1.6,
+        editor_width: 720,
+        font_family: 'mono',
+        review_mode: 'manual',
+        aggressiveness: 'balanced',
+        writing_context: '',
+        sound_enabled: true,
+      } as EditorSettings;
+
+      const result = toFrontendSettings(backendSettings);
+
+      expect(result.keyboardSounds).toEqual({
+        enabled: false,
+        profileId: 'cherry-mx-blue',
+        volume: 0.5,
+        playKeyupSounds: false,
+        pitchVariation: 0.02,
+      });
     });
   });
 
@@ -171,6 +238,13 @@ describe('Tauri utilities', () => {
         aggressiveness: 'gentle',
         writingContext: 'creative writing',
         soundEnabled: true,
+        keyboardSounds: {
+          enabled: true,
+          profileId: 'cherry-mx-brown',
+          volume: 0.6,
+          playKeyupSounds: true,
+          pitchVariation: 0.04,
+        },
       };
 
       const backend = toBackendSettings(originalFrontend);
@@ -186,6 +260,12 @@ describe('Tauri utilities', () => {
       expect(roundTrip.aggressiveness).toBe(originalFrontend.aggressiveness);
       expect(roundTrip.writingContext).toBe(originalFrontend.writingContext);
       expect(roundTrip.soundEnabled).toBe(originalFrontend.soundEnabled);
+      // Keyboard sounds round-trip
+      expect(roundTrip.keyboardSounds.enabled).toBe(originalFrontend.keyboardSounds.enabled);
+      expect(roundTrip.keyboardSounds.profileId).toBe(originalFrontend.keyboardSounds.profileId);
+      expect(roundTrip.keyboardSounds.volume).toBe(originalFrontend.keyboardSounds.volume);
+      expect(roundTrip.keyboardSounds.playKeyupSounds).toBe(originalFrontend.keyboardSounds.playKeyupSounds);
+      expect(roundTrip.keyboardSounds.pitchVariation).toBe(originalFrontend.keyboardSounds.pitchVariation);
     });
   });
 });
