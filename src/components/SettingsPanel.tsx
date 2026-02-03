@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
 import { Theme, AIProvider, AI_MODELS, OPENROUTER_MODELS, LOCAL_LLM_MODELS, AIModelOption, ReviewMode, AggressivenessLevel } from '@/types';
@@ -9,6 +9,9 @@ import { useKeyboardSounds } from '@/hooks/useKeyboardSounds';
 interface SettingsPanelProps {
   onClose: () => void;
 }
+
+// Settings categories
+type SettingsCategory = 'ai' | 'behavior' | 'sounds' | 'appearance' | 'typography';
 
 // Default base URLs for local providers
 const DEFAULT_BASE_URLS: Partial<Record<AIProvider, string>> = {
@@ -26,11 +29,251 @@ const PROVIDER_NAMES: Record<AIProvider, string> = {
   lmstudio: 'LM Studio',
 };
 
+// Category configuration
+const CATEGORIES: { id: SettingsCategory; label: string; icon: ReactNode }[] = [
+  {
+    id: 'ai',
+    label: 'AI',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z" />
+        <path d="M12 12v10" />
+        <path d="M8 18h8" />
+        <circle cx="12" cy="6" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: 'behavior',
+    label: 'Behavior',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'sounds',
+    label: 'Sounds',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+      </svg>
+    ),
+  },
+  {
+    id: 'appearance',
+    label: 'Theme',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="5" />
+        <line x1="12" y1="1" x2="12" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="23" />
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+        <line x1="1" y1="12" x2="3" y2="12" />
+        <line x1="21" y1="12" x2="23" y2="12" />
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+      </svg>
+    ),
+  },
+  {
+    id: 'typography',
+    label: 'Editor',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="4 7 4 4 20 4 20 7" />
+        <line x1="9" y1="20" x2="15" y2="20" />
+        <line x1="12" y1="4" x2="12" y2="20" />
+      </svg>
+    ),
+  },
+];
+
+// Reusable toggle switch component
+function Toggle({
+  checked,
+  onChange,
+  label
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onChange}
+      className="relative w-10 h-5 rounded-full transition-colors"
+      style={{
+        background: checked ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+      }}
+      aria-label={label}
+      role="switch"
+      aria-checked={checked}
+    >
+      <span
+        className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform"
+        style={{
+          background: 'white',
+          transform: checked ? 'translateX(20px)' : 'translateX(0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}
+      />
+    </button>
+  );
+}
+
+// Reusable setting row component
+function SettingRow({
+  label,
+  description,
+  children
+}: {
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="flex-1 min-w-0">
+        <div
+          style={{
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '14px',
+            fontWeight: 500,
+          }}
+        >
+          {label}
+        </div>
+        {description && (
+          <div
+            style={{
+              color: 'var(--text-tertiary)',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '12px',
+              marginTop: '2px',
+              lineHeight: 1.4,
+            }}
+          >
+            {description}
+          </div>
+        )}
+      </div>
+      <div className="flex-shrink-0">{children}</div>
+    </div>
+  );
+}
+
+// Section wrapper
+function SettingSection({
+  title,
+  children
+}: {
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-6 last:mb-0">
+      {title && (
+        <h4
+          className="mb-1 uppercase tracking-wider"
+          style={{
+            color: 'var(--text-tertiary)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+          }}
+        >
+          {title}
+        </h4>
+      )}
+      <div
+        className="rounded-lg overflow-hidden"
+        style={{
+          background: 'var(--bg-primary)',
+          border: '1px solid var(--border-subtle)',
+        }}
+      >
+        <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Button group for multi-select options
+function ButtonGroup<T extends string>({
+  options,
+  value,
+  onChange,
+  getLabel,
+}: {
+  options: T[];
+  value: T;
+  onChange: (value: T) => void;
+  getLabel?: (value: T) => string;
+}) {
+  return (
+    <div
+      className="inline-flex rounded-md overflow-hidden"
+      style={{
+        background: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-default)',
+      }}
+    >
+      {options.map((option, index) => (
+        <button
+          key={option}
+          onClick={() => onChange(option)}
+          className="px-3 py-1.5 text-sm transition-colors"
+          style={{
+            background: value === option ? 'var(--accent-primary)' : 'transparent',
+            color: value === option ? 'white' : 'var(--text-secondary)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '13px',
+            fontWeight: value === option ? 500 : 400,
+            borderLeft: index > 0 ? '1px solid var(--border-default)' : 'none',
+          }}
+        >
+          {getLabel ? getLabel(option) : option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Wrapped setting row with padding
+function SettingItem({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="px-4">
+      <SettingRow label={label} description={description}>
+        {children}
+      </SettingRow>
+    </div>
+  );
+}
+
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { settings, updateSettings } = useSettings();
   const { setAIConfig, aiConfig } = useMiku();
   const { profiles: keyboardSoundProfiles } = useKeyboardSounds();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('ai');
 
   // Local state for API keys (not saved until Apply is clicked)
   const [apiKeys, setApiKeys] = useState<Record<AIProvider, string>>({
@@ -175,7 +418,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
 
     // Update selected model to first available for new provider
-    // Inline the model selection logic to avoid dependency on getModelsForProvider
     let models: AIModelOption[];
     switch (selectedProvider) {
       case 'openrouter':
@@ -183,7 +425,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         break;
       case 'ollama':
       case 'lmstudio':
-        // When provider changes, localModels is reset to [], so use suggestions
         models = LOCAL_LLM_MODELS.map(m => ({ ...m, provider: selectedProvider }));
         break;
       default:
@@ -243,322 +484,218 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     return allModels.find(m => m.id === modelId)?.name || modelId;
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0, 0, 0, 0.5)' }}
-    >
-      <div
-        ref={panelRef}
-        className="w-full max-w-md overflow-y-auto animate-in fade-in zoom-in-95"
-        style={{
-          maxHeight: '85vh',
-          background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          boxShadow: 'var(--shadow-lg)',
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between p-4 border-b"
-          style={{ borderColor: 'var(--border-default)' }}
-        >
-          <h2
-            className="font-semibold"
-            style={{
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-sans)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--weight-semibold)',
-            }}
-          >
-            Settings
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
-            aria-label="Close settings"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 14 14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <path d="M1 1l12 12M13 1L1 13" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 space-y-6">
-          {/* AI Configuration section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
-            >
-              AI Configuration
-            </h3>
-
-            {/* Provider selection */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                Provider
-              </label>
-              {/* Cloud providers row */}
-              <div className="flex gap-2 mb-2">
-                {(['openrouter', 'openai', 'anthropic', 'google'] as AIProvider[]).map(provider => (
-                  <button
-                    key={provider}
-                    onClick={() => setSelectedProvider(provider)}
-                    className="flex-1 py-2 px-2 rounded text-sm transition-colors"
-                    style={{
-                      background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '12px',
-                    }}
-                  >
-                    {PROVIDER_NAMES[provider]}
-                  </button>
-                ))}
-              </div>
-              {/* Local LLM providers row */}
-              <div className="flex gap-2">
-                {(['ollama', 'lmstudio'] as AIProvider[]).map(provider => (
-                  <button
-                    key={provider}
-                    onClick={() => setSelectedProvider(provider)}
-                    className="flex-1 py-2 px-2 rounded text-sm transition-colors"
-                    style={{
-                      background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '12px',
-                    }}
-                  >
-                    {PROVIDER_NAMES[provider]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Base URL for local providers */}
-            {isLocalProvider && (
-              <div className="mb-4">
-                <label
-                  className="block mb-2"
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
-                  }}
-                >
-                  Server URL
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={baseUrl}
-                    onChange={e => setBaseUrl(e.target.value)}
-                    placeholder={DEFAULT_BASE_URLS[selectedProvider]}
-                    className="flex-1 p-2 rounded"
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-sm)',
-                    }}
-                  />
-                  <button
-                    onClick={fetchLocalModels}
-                    disabled={isLoadingModels}
-                    className="px-3 py-2 rounded text-sm transition-colors"
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                      cursor: isLoadingModels ? 'wait' : 'pointer',
-                    }}
-                  >
-                    {isLoadingModels ? 'Loading...' : 'Refresh'}
-                  </button>
+  // Render content for each category
+  const renderCategoryContent = () => {
+    switch (activeCategory) {
+      case 'ai':
+        return (
+          <>
+            {/* Provider Selection */}
+            <SettingSection title="Provider">
+              <div className="p-4">
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {(['openrouter', 'openai', 'anthropic', 'google'] as AIProvider[]).map(provider => (
+                    <button
+                      key={provider}
+                      onClick={() => setSelectedProvider(provider)}
+                      className="py-2.5 px-3 rounded-md text-sm transition-all"
+                      style={{
+                        background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                        color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: '13px',
+                        fontWeight: selectedProvider === provider ? 500 : 400,
+                        border: selectedProvider === provider ? 'none' : '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      {PROVIDER_NAMES[provider]}
+                    </button>
+                  ))}
                 </div>
-                {modelLoadError && (
+                <div className="grid grid-cols-2 gap-2">
+                  {(['ollama', 'lmstudio'] as AIProvider[]).map(provider => (
+                    <button
+                      key={provider}
+                      onClick={() => setSelectedProvider(provider)}
+                      className="py-2.5 px-3 rounded-md text-sm transition-all"
+                      style={{
+                        background: selectedProvider === provider ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                        color: selectedProvider === provider ? 'white' : 'var(--text-primary)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: '13px',
+                        fontWeight: selectedProvider === provider ? 500 : 400,
+                        border: selectedProvider === provider ? 'none' : '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      {PROVIDER_NAMES[provider]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </SettingSection>
+
+            {/* Local Provider URL */}
+            {isLocalProvider && (
+              <SettingSection title="Server">
+                <div className="p-4">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={baseUrl}
+                      onChange={e => setBaseUrl(e.target.value)}
+                      placeholder={DEFAULT_BASE_URLS[selectedProvider]}
+                      className="flex-1 p-2.5 rounded-md"
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-default)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <button
+                      onClick={fetchLocalModels}
+                      disabled={isLoadingModels}
+                      className="px-4 py-2.5 rounded-md text-sm transition-colors"
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-default)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: '13px',
+                        cursor: isLoadingModels ? 'wait' : 'pointer',
+                        opacity: isLoadingModels ? 0.7 : 1,
+                      }}
+                    >
+                      {isLoadingModels ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  {modelLoadError && (
+                    <p
+                      className="mt-2"
+                      style={{
+                        color: '#ef4444',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: '12px',
+                      }}
+                    >
+                      {modelLoadError}
+                    </p>
+                  )}
                   <p
-                    className="mt-1"
+                    className="mt-2"
                     style={{
-                      color: 'var(--text-error, #ef4444)',
+                      color: 'var(--text-tertiary)',
                       fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-xs)',
+                      fontSize: '12px',
                     }}
                   >
-                    {modelLoadError}
+                    {selectedProvider === 'ollama'
+                      ? 'Make sure Ollama is running locally.'
+                      : 'Make sure LM Studio server is running.'}
                   </p>
-                )}
-                <p
-                  className="mt-1"
-                  style={{
-                    color: 'var(--text-tertiary)',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-xs)',
-                  }}
-                >
-                  {selectedProvider === 'ollama'
-                    ? 'Make sure Ollama is running locally.'
-                    : 'Make sure LM Studio server is running.'}
-                </p>
-              </div>
+                </div>
+              </SettingSection>
             )}
 
-            {/* Model selection */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                Model
-              </label>
-              <select
-                value={selectedModel}
-                onChange={e => setSelectedModel(e.target.value)}
-                className="w-full p-2 rounded"
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                {availableModels.map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              {/* Custom model input for local providers */}
-              {isLocalProvider && (
-                <div className="mt-2">
+            {/* Model Selection */}
+            <SettingSection title="Model">
+              <div className="p-4">
+                <select
+                  value={selectedModel}
+                  onChange={e => setSelectedModel(e.target.value)}
+                  className="w-full p-2.5 rounded-md"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-default)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '13px',
+                  }}
+                >
+                  {availableModels.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                {isLocalProvider && (
                   <input
                     type="text"
                     value={customModel}
                     onChange={e => setCustomModel(e.target.value)}
                     placeholder="Or enter custom model name..."
-                    className="w-full p-2 rounded"
+                    className="w-full p-2.5 rounded-md mt-2"
                     style={{
                       background: 'var(--bg-tertiary)',
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-default)',
-                      borderRadius: 'var(--radius-sm)',
                       fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-sm)',
+                      fontSize: '13px',
                     }}
                   />
-                </div>
-              )}
-            </div>
-
-            {/* API Key input - only for cloud providers */}
-            {requiresApiKey && (
-              <div className="mb-4">
-                <label
-                  className="block mb-2"
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
-                  }}
-                >
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  value={currentApiKey}
-                  onChange={e => setApiKeys(prev => ({ ...prev, [selectedProvider]: e.target.value }))}
-                  placeholder={`Enter your ${PROVIDER_NAMES[selectedProvider]} API key`}
-                  className="w-full p-2 rounded"
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-sm)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 'var(--text-sm)',
-                  }}
-                />
-                <p
-                  className="mt-1"
-                  style={{
-                    color: 'var(--text-tertiary)',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-xs)',
-                  }}
-                >
-                  {selectedProvider === 'openrouter'
-                    ? 'Get your API key at openrouter.ai/keys'
-                    : 'Your API key is stored locally and never sent to our servers.'}
-                </p>
+                )}
               </div>
+            </SettingSection>
+
+            {/* API Key */}
+            {requiresApiKey && (
+              <SettingSection title="Authentication">
+                <div className="p-4">
+                  <input
+                    type="password"
+                    value={currentApiKey}
+                    onChange={e => setApiKeys(prev => ({ ...prev, [selectedProvider]: e.target.value }))}
+                    placeholder={`Enter your ${PROVIDER_NAMES[selectedProvider]} API key`}
+                    className="w-full p-2.5 rounded-md"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-default)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '13px',
+                    }}
+                  />
+                  <p
+                    className="mt-2"
+                    style={{
+                      color: 'var(--text-tertiary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {selectedProvider === 'openrouter'
+                      ? 'Get your API key at openrouter.ai/keys'
+                      : 'Your API key is stored locally and never sent to our servers.'}
+                  </p>
+                </div>
+              </SettingSection>
             )}
 
-            {/* Save/Clear buttons */}
-            <div className="flex gap-2">
+            {/* Actions */}
+            <div className="flex gap-2 mt-4">
               <button
                 onClick={handleSaveAPIConfig}
                 disabled={requiresApiKey && !currentApiKey}
-                className="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors"
+                className="flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-colors"
                 style={{
                   background: (!requiresApiKey || currentApiKey) ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
                   color: (!requiresApiKey || currentApiKey) ? 'white' : 'var(--text-tertiary)',
-                  borderRadius: 'var(--radius-sm)',
                   fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
                   cursor: (!requiresApiKey || currentApiKey) ? 'pointer' : 'not-allowed',
                 }}
               >
-                {isConfigured ? 'Update' : 'Apply'}
+                {isConfigured ? 'Update Configuration' : 'Apply Configuration'}
               </button>
               {aiConfig && (
                 <button
                   onClick={handleClearAPIConfig}
-                  className="py-2 px-3 rounded text-sm font-medium transition-colors hover:bg-[var(--bg-tertiary)]"
+                  className="py-2.5 px-4 rounded-md text-sm font-medium transition-colors hover:bg-[var(--bg-tertiary)]"
                   style={{
                     background: 'transparent',
                     color: 'var(--text-secondary)',
                     border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-sm)',
                     fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
                   }}
                 >
                   Clear
@@ -569,623 +706,536 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             {/* Status indicator */}
             {aiConfig && (
               <div
-                className="mt-3 p-2 rounded flex items-center gap-2"
+                className="mt-4 p-3 rounded-md flex items-center gap-3"
                 style={{
                   background: 'var(--accent-subtle)',
-                  borderRadius: 'var(--radius-sm)',
                 }}
               >
                 <span
-                  className="w-2 h-2 rounded-full"
+                  className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ background: 'var(--accent-primary)' }}
                 />
                 <span
                   style={{
                     color: 'var(--text-primary)',
                     fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
+                    fontSize: '13px',
                   }}
                 >
-                  Using {findModelName(aiConfig.model)} ({PROVIDER_NAMES[aiConfig.provider]})
+                  Using {findModelName(aiConfig.model)} via {PROVIDER_NAMES[aiConfig.provider]}
                 </span>
               </div>
             )}
-          </section>
+          </>
+        );
 
-          {/* Miku Behavior section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
-            >
-              Miku Behavior
-            </h3>
+      case 'behavior':
+        return (
+          <>
+            <SettingSection title="Review Mode">
+              <SettingItem
+                label="Trigger"
+                description={
+                  settings.reviewMode === 'manual'
+                    ? 'Press Cmd+Enter or click Review to analyze.'
+                    : 'Miku will review after you pause typing.'
+                }
+              >
+                <ButtonGroup
+                  options={['manual', 'auto'] as ReviewMode[]}
+                  value={settings.reviewMode}
+                  onChange={(value) => updateSettings({ reviewMode: value })}
+                  getLabel={(v) => v === 'manual' ? 'Manual' : 'Auto'}
+                />
+              </SettingItem>
+            </SettingSection>
 
-            {/* Review Mode */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
+            <SettingSection title="Review Style">
+              <SettingItem
+                label="Aggressiveness"
+                description={
+                  settings.aggressiveness === 'gentle'
+                    ? 'Focus on major issues only.'
+                    : settings.aggressiveness === 'balanced'
+                    ? 'Balance between helpfulness and style.'
+                    : 'Thorough review of grammar, style, and clarity.'
+                }
               >
-                Review Mode
-              </label>
-              <div className="flex gap-2">
-                {([
-                  { value: 'manual', label: 'Manual (Cmd+Enter)' },
-                  { value: 'auto', label: 'Auto' },
-                ] as { value: ReviewMode; label: string }[]).map(mode => (
-                  <button
-                    key={mode.value}
-                    onClick={() => updateSettings({ reviewMode: mode.value })}
-                    className="flex-1 py-2 px-3 rounded text-sm transition-colors"
-                    style={{
-                      background: settings.reviewMode === mode.value ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: settings.reviewMode === mode.value ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                    }}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                {settings.reviewMode === 'manual'
-                  ? 'Press Cmd+Enter or click Review to analyze your writing.'
-                  : 'Miku will automatically review after you pause typing.'}
-              </p>
-            </div>
+                <ButtonGroup
+                  options={['gentle', 'balanced', 'strict'] as AggressivenessLevel[]}
+                  value={settings.aggressiveness}
+                  onChange={(value) => updateSettings({ aggressiveness: value })}
+                  getLabel={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
+                />
+              </SettingItem>
+            </SettingSection>
 
-            {/* Aggressiveness */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                Aggressiveness
-              </label>
-              <div className="flex gap-2">
-                {([
-                  { value: 'gentle', label: 'Gentle' },
-                  { value: 'balanced', label: 'Balanced' },
-                  { value: 'strict', label: 'Strict' },
-                ] as { value: AggressivenessLevel; label: string }[]).map(level => (
-                  <button
-                    key={level.value}
-                    onClick={() => updateSettings({ aggressiveness: level.value })}
-                    className="flex-1 py-2 px-3 rounded text-sm transition-colors"
-                    style={{
-                      background: settings.aggressiveness === level.value ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: settings.aggressiveness === level.value ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                    }}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                {settings.aggressiveness === 'gentle'
-                  ? 'Focus on major issues only, ignore minor style choices.'
-                  : settings.aggressiveness === 'balanced'
-                  ? 'Balance between helpfulness and respecting your style.'
-                  : 'Thorough review of grammar, style, and clarity.'}
-              </p>
-            </div>
-
-            {/* Writing Context */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                Writing Context (optional)
-              </label>
-              <textarea
-                value={settings.writingContext}
-                onChange={e => updateSettings({ writingContext: e.target.value })}
-                placeholder="e.g., Technical blog post, Academic essay, Creative fiction..."
-                rows={2}
-                className="w-full p-2 rounded resize-none"
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              />
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                Help Miku understand what you&apos;re writing for better suggestions.
-              </p>
-            </div>
-
-            {/* Sound Notification */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
+            <SettingSection title="Context">
+              <div className="p-4">
                 <label
+                  className="block mb-2"
                   style={{
-                    color: 'var(--text-secondary)',
+                    color: 'var(--text-primary)',
                     fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
+                    fontSize: '14px',
+                    fontWeight: 500,
                   }}
                 >
-                  Sound Notification
+                  Writing Context
                 </label>
-                <button
-                  onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })}
-                  className="relative w-11 h-6 rounded-full transition-colors"
+                <textarea
+                  value={settings.writingContext}
+                  onChange={e => updateSettings({ writingContext: e.target.value })}
+                  placeholder="e.g., Technical blog post, Academic essay, Creative fiction..."
+                  rows={3}
+                  className="w-full p-3 rounded-md resize-none"
                   style={{
-                    background: settings.soundEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
                     border: '1px solid var(--border-default)',
-                  }}
-                  aria-label={settings.soundEnabled ? 'Disable sound' : 'Enable sound'}
-                >
-                  <span
-                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
-                    style={{
-                      background: 'white',
-                      transform: settings.soundEnabled ? 'translateX(20px)' : 'translateX(0)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                    }}
-                  />
-                </button>
-              </div>
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                Play a sound when Miku finishes reviewing your writing.
-              </p>
-            </div>
-          </section>
-
-          {/* Keyboard Sounds section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
-            >
-              Keyboard Sounds
-            </h3>
-
-            {/* Enable/Disable Toggle */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
-                <label
-                  style={{
-                    color: 'var(--text-secondary)',
                     fontFamily: 'var(--font-sans)',
-                    fontSize: 'var(--text-sm)',
+                    fontSize: '13px',
+                    lineHeight: 1.5,
+                  }}
+                />
+                <p
+                  className="mt-2"
+                  style={{
+                    color: 'var(--text-tertiary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
                   }}
                 >
-                  Enable Keyboard Sounds
-                </label>
-                <button
-                  onClick={() => updateSettings({
+                  Help Miku understand what you&apos;re writing for better suggestions.
+                </p>
+              </div>
+            </SettingSection>
+          </>
+        );
+
+      case 'sounds':
+        return (
+          <>
+            <SettingSection title="Notifications">
+              <SettingItem
+                label="Review Complete Sound"
+                description="Play a sound when Miku finishes reviewing."
+              >
+                <Toggle
+                  checked={settings.soundEnabled}
+                  onChange={() => updateSettings({ soundEnabled: !settings.soundEnabled })}
+                  label="Sound notification"
+                />
+              </SettingItem>
+            </SettingSection>
+
+            <SettingSection title="Keyboard Sounds">
+              <SettingItem
+                label="Enable"
+                description="Play mechanical keyboard sounds while typing."
+              >
+                <Toggle
+                  checked={settings.keyboardSounds.enabled}
+                  onChange={() => updateSettings({
                     keyboardSounds: {
                       ...settings.keyboardSounds,
                       enabled: !settings.keyboardSounds.enabled,
                     },
                   })}
-                  className="relative w-11 h-6 rounded-full transition-colors"
-                  style={{
-                    background: settings.keyboardSounds.enabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-default)',
-                  }}
-                  aria-label={settings.keyboardSounds.enabled ? 'Disable keyboard sounds' : 'Enable keyboard sounds'}
-                >
-                  <span
-                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
-                    style={{
-                      background: 'white',
-                      transform: settings.keyboardSounds.enabled ? 'translateX(20px)' : 'translateX(0)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                    }}
-                  />
-                </button>
-              </div>
-              <p
-                className="mt-1"
-                style={{
-                  color: 'var(--text-tertiary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-xs)',
-                }}
-              >
-                Play mechanical keyboard sounds while typing.
-              </p>
-            </div>
+                  label="Keyboard sounds"
+                />
+              </SettingItem>
 
-            {/* Sound Profile Selector - only show when enabled */}
-            {settings.keyboardSounds.enabled && (
-              <>
-                <div className="mb-4">
-                  <label
-                    className="block mb-2"
-                    style={{
-                      color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                    }}
+              {settings.keyboardSounds.enabled && (
+                <>
+                  <SettingItem
+                    label="Sound Profile"
                   >
-                    Sound Profile
-                  </label>
-                  <select
-                    value={settings.keyboardSounds.profileId}
-                    onChange={e => updateSettings({
-                      keyboardSounds: {
-                        ...settings.keyboardSounds,
-                        profileId: e.target.value,
-                      },
-                    })}
-                    className="w-full p-2 rounded"
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                    }}
-                    disabled={keyboardSoundProfiles.length === 0}
-                  >
-                    {keyboardSoundProfiles.length === 0 ? (
-                      <option value="">No sound packs installed</option>
-                    ) : (
-                      keyboardSoundProfiles.map(profile => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {keyboardSoundProfiles.length === 0 && (
-                    <p
-                      className="mt-1"
+                    <select
+                      value={settings.keyboardSounds.profileId}
+                      onChange={e => updateSettings({
+                        keyboardSounds: {
+                          ...settings.keyboardSounds,
+                          profileId: e.target.value,
+                        },
+                      })}
+                      className="p-2 rounded-md min-w-[140px]"
                       style={{
-                        color: 'var(--text-tertiary)',
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-default)',
                         fontFamily: 'var(--font-sans)',
-                        fontSize: 'var(--text-xs)',
+                        fontSize: '13px',
                       }}
+                      disabled={keyboardSoundProfiles.length === 0}
                     >
-                      Add MechVibes sound packs to /public/sounds/keyboards/
-                    </p>
-                  )}
-                </div>
+                      {keyboardSoundProfiles.length === 0 ? (
+                        <option value="">No sound packs</option>
+                      ) : (
+                        keyboardSoundProfiles.map(profile => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </SettingItem>
 
-                {/* Volume Slider */}
-                <div className="mb-4">
-                  <label
-                    className="flex justify-between mb-2"
-                    style={{
-                      color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
-                    }}
+                  <div className="px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span
+                        style={{
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-sans)',
+                          fontSize: '14px',
+                          fontWeight: 500,
+                        }}
+                      >
+                        Volume
+                      </span>
+                      <span
+                        style={{
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {Math.round(settings.keyboardSounds.volume * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={settings.keyboardSounds.volume * 100}
+                      onChange={e => updateSettings({
+                        keyboardSounds: {
+                          ...settings.keyboardSounds,
+                          volume: Number(e.target.value) / 100,
+                        },
+                      })}
+                      className="w-full"
+                      style={{ accentColor: 'var(--accent-primary)' }}
+                    />
+                  </div>
+
+                  <SettingItem
+                    label="Key Release Sounds"
+                    description="Play additional sound when keys are released."
                   >
-                    <span>Volume</span>
-                    <span style={{ color: 'var(--text-primary)' }}>
-                      {Math.round(settings.keyboardSounds.volume * 100)}%
-                    </span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={settings.keyboardSounds.volume * 100}
-                    onChange={e => updateSettings({
-                      keyboardSounds: {
-                        ...settings.keyboardSounds,
-                        volume: Number(e.target.value) / 100,
-                      },
-                    })}
-                    className="w-full"
-                    style={{ accentColor: 'var(--accent-primary)' }}
-                  />
-                </div>
-
-                {/* Keyup Sounds Toggle */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between">
-                    <label
-                      style={{
-                        color: 'var(--text-secondary)',
-                        fontFamily: 'var(--font-sans)',
-                        fontSize: 'var(--text-sm)',
-                      }}
-                    >
-                      Play Key Release Sounds
-                    </label>
-                    <button
-                      onClick={() => updateSettings({
+                    <Toggle
+                      checked={settings.keyboardSounds.playKeyupSounds}
+                      onChange={() => updateSettings({
                         keyboardSounds: {
                           ...settings.keyboardSounds,
                           playKeyupSounds: !settings.keyboardSounds.playKeyupSounds,
                         },
                       })}
-                      className="relative w-11 h-6 rounded-full transition-colors"
-                      style={{
-                        background: settings.keyboardSounds.playKeyupSounds ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                        border: '1px solid var(--border-default)',
-                      }}
-                      aria-label={settings.keyboardSounds.playKeyupSounds ? 'Disable keyup sounds' : 'Enable keyup sounds'}
-                    >
-                      <span
-                        className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform"
-                        style={{
-                          background: 'white',
-                          transform: settings.keyboardSounds.playKeyupSounds ? 'translateX(20px)' : 'translateX(0)',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                        }}
-                      />
-                    </button>
-                  </div>
-                  <p
-                    className="mt-1"
+                      label="Keyup sounds"
+                    />
+                  </SettingItem>
+                </>
+              )}
+            </SettingSection>
+
+            {keyboardSoundProfiles.length === 0 && settings.keyboardSounds.enabled && (
+              <div
+                className="p-4 rounded-md mt-4"
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  border: '1px dashed var(--border-default)',
+                }}
+              >
+                <p
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                  }}
+                >
+                  No sound packs installed. Add MechVibes sound packs to{' '}
+                  <code
                     style={{
-                      color: 'var(--text-tertiary)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '12px',
+                      background: 'var(--bg-primary)',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
                     }}
                   >
-                    Play additional sound when keys are released.
-                  </p>
-                </div>
-              </>
+                    /public/sounds/keyboards/
+                  </code>
+                </p>
+              </div>
             )}
-          </section>
+          </>
+        );
 
-          {/* Appearance section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
+      case 'appearance':
+        return (
+          <SettingSection title="Theme">
+            <SettingItem
+              label="Color Scheme"
+              description="Choose how the interface appears."
             >
-              Appearance
-            </h3>
+              <ButtonGroup
+                options={['light', 'dark', 'system'] as Theme[]}
+                value={settings.theme}
+                onChange={(value) => updateSettings({ theme: value })}
+                getLabel={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
+              />
+            </SettingItem>
+          </SettingSection>
+        );
 
-            {/* Theme */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
+      case 'typography':
+        return (
+          <>
+            <SettingSection title="Font">
+              <SettingItem
+                label="Font Family"
               >
-                Theme
-              </label>
-              <div className="flex gap-2">
-                {(['light', 'dark', 'system'] as Theme[]).map(theme => (
-                  <button
-                    key={theme}
-                    onClick={() => updateSettings({ theme })}
-                    className="flex-1 py-2 px-3 rounded text-sm capitalize transition-colors"
+                <ButtonGroup
+                  options={['mono', 'sans'] as const}
+                  value={settings.fontFamily}
+                  onChange={(value) => updateSettings({ fontFamily: value })}
+                  getLabel={(v) => v === 'mono' ? 'Mono' : 'Sans'}
+                />
+              </SettingItem>
+
+              <div className="px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span
                     style={{
-                      background: settings.theme === theme ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: settings.theme === theme ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
                       fontFamily: 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
+                      fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   >
-                    {theme}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Typography section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
-            >
-              Typography
-            </h3>
-
-            {/* Font family */}
-            <div className="mb-4">
-              <label
-                className="block mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                Font
-              </label>
-              <div className="flex gap-2">
-                {(['mono', 'sans'] as const).map(font => (
-                  <button
-                    key={font}
-                    onClick={() => updateSettings({ fontFamily: font })}
-                    className="flex-1 py-2 px-3 rounded text-sm capitalize transition-colors"
+                    Size
+                  </span>
+                  <span
                     style={{
-                      background: settings.fontFamily === font ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                      color: settings.fontFamily === font ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontFamily: font === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)',
-                      fontSize: 'var(--text-sm)',
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '12px',
                     }}
                   >
-                    {font === 'mono' ? 'Monospace' : 'Sans Serif'}
-                  </button>
-                ))}
+                    {settings.fontSize}px
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="14"
+                  max="24"
+                  value={settings.fontSize}
+                  onChange={e => updateSettings({ fontSize: Number(e.target.value) })}
+                  className="w-full"
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
               </div>
-            </div>
 
-            {/* Font size */}
-            <div className="mb-4">
-              <label
-                className="flex justify-between mb-2"
+              <div className="px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Line Height
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {settings.lineHeight.toFixed(1)}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1.4"
+                  max="2.0"
+                  step="0.1"
+                  value={settings.lineHeight}
+                  onChange={e => updateSettings({ lineHeight: Number(e.target.value) })}
+                  className="w-full"
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
+              </div>
+            </SettingSection>
+
+            <SettingSection title="Layout">
+              <div className="px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Editor Width
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {settings.editorWidth}px
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="480"
+                  max="960"
+                  step="20"
+                  value={settings.editorWidth}
+                  onChange={e => updateSettings({ editorWidth: Number(e.target.value) })}
+                  className="w-full"
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
+              </div>
+            </SettingSection>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+    >
+      <div
+        ref={panelRef}
+        className="w-full flex overflow-hidden animate-in fade-in zoom-in-95"
+        style={{
+          maxWidth: '640px',
+          maxHeight: '85vh',
+          background: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
+        }}
+      >
+        {/* Left Navigation */}
+        <div
+          className="flex-shrink-0 py-4 overflow-y-auto"
+          style={{
+            width: '72px',
+            background: 'var(--bg-tertiary)',
+            borderRight: '1px solid var(--border-default)',
+          }}
+        >
+          <nav className="flex flex-col gap-1 px-2">
+            {CATEGORIES.map(category => (
+              <button
+                key={category.id}
+                onClick={() => setActiveCategory(category.id)}
+                className="flex flex-col items-center gap-1 py-2.5 px-2 rounded-md transition-colors"
                 style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
+                  background: activeCategory === category.id ? 'var(--bg-primary)' : 'transparent',
+                  color: activeCategory === category.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
                 }}
+                title={category.label}
               >
-                <span>Font Size</span>
-                <span style={{ color: 'var(--text-primary)' }}>{settings.fontSize}px</span>
-              </label>
-              <input
-                type="range"
-                min="14"
-                max="24"
-                value={settings.fontSize}
-                onChange={e => updateSettings({ fontSize: Number(e.target.value) })}
-                className="w-full accent-[var(--accent-primary)]"
-                style={{ accentColor: 'var(--accent-primary)' }}
-              />
-            </div>
-
-            {/* Line height */}
-            <div className="mb-4">
-              <label
-                className="flex justify-between mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                <span>Line Height</span>
-                <span style={{ color: 'var(--text-primary)' }}>{settings.lineHeight.toFixed(1)}</span>
-              </label>
-              <input
-                type="range"
-                min="1.4"
-                max="2.0"
-                step="0.1"
-                value={settings.lineHeight}
-                onChange={e => updateSettings({ lineHeight: Number(e.target.value) })}
-                className="w-full"
-                style={{ accentColor: 'var(--accent-primary)' }}
-              />
-            </div>
-          </section>
-
-          {/* Editor section */}
-          <section>
-            <h3
-              className="mb-3"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--weight-medium)',
-              }}
-            >
-              Editor
-            </h3>
-
-            {/* Editor width */}
-            <div className="mb-4">
-              <label
-                className="flex justify-between mb-2"
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                <span>Max Width</span>
-                <span style={{ color: 'var(--text-primary)' }}>{settings.editorWidth}px</span>
-              </label>
-              <input
-                type="range"
-                min="480"
-                max="960"
-                step="20"
-                value={settings.editorWidth}
-                onChange={e => updateSettings({ editorWidth: Number(e.target.value) })}
-                className="w-full"
-                style={{ accentColor: 'var(--accent-primary)' }}
-              />
-            </div>
-          </section>
+                <span
+                  style={{
+                    color: activeCategory === category.id ? 'var(--accent-primary)' : 'var(--text-tertiary)',
+                  }}
+                >
+                  {category.icon}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '10px',
+                    fontWeight: activeCategory === category.id ? 500 : 400,
+                  }}
+                >
+                  {category.label}
+                </span>
+              </button>
+            ))}
+          </nav>
         </div>
 
-        {/* Footer */}
-        <div
-          className="p-4 border-t"
-          style={{ borderColor: 'var(--border-default)' }}
-        >
-          <p
-            className="text-center"
-            style={{
-              color: 'var(--text-tertiary)',
-              fontFamily: 'var(--font-sans)',
-              fontSize: 'var(--text-xs)',
-            }}
+        {/* Right Content */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-5 py-4 flex-shrink-0"
+            style={{ borderBottom: '1px solid var(--border-default)' }}
           >
-            Miku — The Editor That Listens
-          </p>
+            <h2
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: '16px',
+                fontWeight: 600,
+                margin: 0,
+              }}
+            >
+              {CATEGORIES.find(c => c.id === activeCategory)?.label} Settings
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-md transition-colors hover:bg-[var(--bg-tertiary)]"
+              aria-label="Close settings"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <path d="M1 1l12 12M13 1L1 13" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Scrollable Content */}
+          <div
+            className="flex-1 overflow-y-auto p-5"
+            style={{ minHeight: 0 }}
+          >
+            {renderCategoryContent()}
+          </div>
+
+          {/* Footer */}
+          <div
+            className="px-5 py-3 flex-shrink-0"
+            style={{ borderTop: '1px solid var(--border-default)' }}
+          >
+            <p
+              style={{
+                color: 'var(--text-tertiary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: '11px',
+                textAlign: 'center',
+                margin: 0,
+              }}
+            >
+              Miku v0.0.7 - The Editor That Listens
+            </p>
+          </div>
         </div>
       </div>
     </div>

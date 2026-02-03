@@ -12,6 +12,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import InputDialog from "@/components/ui/InputDialog";
 import UpdateNotification from "@/components/ui/UpdateNotification";
 import SettingsPanel from "@/components/SettingsPanel";
+import AutoSaveManager from "@/components/AutoSaveManager";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useDocument } from "@/context/DocumentContext";
 
@@ -148,6 +149,7 @@ export default function Home() {
 
   return (
     <main className="relative h-screen flex flex-col overflow-hidden">
+      <AutoSaveManager />
       <SoundNotifier />
       <UpdateNotification />
       <WorkspaceSelector />

@@ -32,6 +32,8 @@ interface DocumentContextType {
   closeDocument: (id: string, currentContent?: string) => void;
   registerContentGetter: (getter: () => string) => void;
   getEditorContent: () => string;
+  /** Mark a document as saved (updates originalContent to match current content) */
+  markDocumentSaved: (docId: string) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -136,6 +138,16 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         : doc
     ));
   }, [activeDocumentId]);
+
+  // Mark a document as saved (for auto-save)
+  // This updates originalContent to match current content, clearing the modified flag
+  const markDocumentSaved = useCallback((docId: string) => {
+    setOpenDocuments(prev => prev.map(doc =>
+      doc.id === docId
+        ? { ...doc, originalContent: doc.content, isModified: false }
+        : doc
+    ));
+  }, []);
 
   const loadRecentFiles = useCallback(async () => {
     const files = await safeTauriCall(getRecentFiles, []);
@@ -346,6 +358,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         closeDocument,
         registerContentGetter,
         getEditorContent,
+        markDocumentSaved,
       }}
     >
       {children}

@@ -1,10 +1,10 @@
 # Echoes of the Void
 
-A roguelike deckbuilder set in a dying universe where players collect memories of fallen civilizations to power their abilities.
+A roguelike deckbuilder set in a dying universe. Players collect memories of fallen civilizations to power their abilities.
 
 ## Overview
 
-In **Echoes of the Void**, you play as a Remembrancer—one of the last beings capable of channeling the memories of extinct species. As the universe slowly collapses into entropy, you travel between dying star systems, collecting memory fragments and using them to survive encounters with the Hollow—entities born from the void itself.
+In **Echoes of the Void**, you play as a Remembrancer—one of the last beings capable of channeling the memories of extinct species. As the universe slowly collapses into entropy, you travel between dying star systems, collecting memory fragments. You use these fragments to survive encounters with the Hollow—entities born from the void itself.
 
 ## Core Mechanics
 
@@ -21,12 +21,12 @@ In **Echoes of the Void**, you play as a Remembrancer—one of the last beings c
 ### Star System Navigation
 - Procedurally generated star maps
 - Each node is a dying world with unique encounters
-- Risk/reward choices: more dangerous paths yield rarer memories
+- Choose your path: more dangerous routes yield rarer memories
 
 ## Current Build
 
 **Version:** 0.4.2-alpha
-**Last Updated:** 2026-01-28
+**Last Updated:** 2024-01-28
 **Status:** Playable vertical slice
 
 ### What's Working
@@ -43,7 +43,7 @@ In **Echoes of the Void**, you play as a Remembrancer—one of the last beings c
 
 ## Team
 
-- **Design & Code:** Solo dev (that's me!)
+- **Design & Code:** Solo developer
 - **Art:** Commissioned from various artists
 - **Music:** Placeholder tracks, looking for composer
 

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -12,34 +12,43 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+});
+
 export const metadata: Metadata = {
-  title: "Miku — The Editor That Listens",
-  description: "A markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer.",
+  title: "Miku - Center your workflows",
+  description:
+    "Miku is a central hub for a developer's many complex workflows. Write docs, manage tasks, configure environments, and let AI assist without overwriting your voice.",
   openGraph: {
-    title: "Miku — The Editor That Listens",
-    description: "A markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer.",
+    title: "Miku - Center your workflows",
+    description:
+      "A central hub for a developer's many complex workflows. Write docs, manage tasks, configure environments, and let AI assist without overwriting your voice.",
     type: "website",
-    "images": [
+    images: [
       {
-        url: "https://github.com/porkytheblack/miku/blob/main/public/og-image.png?raw=true",
+        url: "/og-data.png",
         width: 1200,
         height: 730,
-        alt: "Miku — The Editor That Listens",
-      }
-    ]
+        alt: "Miku - Center your workflows",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Miku — The Editor That Listens",
-    description: "A markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer.",
+    title: "Miku - Center your workflows",
+    description:
+      "A central hub for a developer's many complex workflows. Write docs, manage tasks, configure environments, and let AI assist without overwriting your voice.",
     images: [
       {
-        url: "https://github.com/porkytheblack/miku/blob/main/public/og-image.png?raw=true",
+        url: "/og-data.png",
         width: 1200,
         height: 730,
-        alt: "Miku — The Editor That Listens",
-      }
-    ]
+        alt: "Miku - Center your workflows",
+      },
+    ],
   },
 };
 
@@ -50,7 +59,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}>
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} antialiased`}
+      >
         {children}
       </body>
     </html>

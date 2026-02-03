@@ -23,6 +23,12 @@
   /* Fonts */
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
+  /* Animation timing */
+  --animation-fast: 150ms;
+  --animation-normal: 300ms;
+  --animation-slow: 500ms;
 }
 
 html {
@@ -33,6 +39,13 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Serif font utility for hero accent text */
+.font-serif {
+  font-family: var(--font-serif);
 }
 
 /* Custom underline animation for hero */
@@ -59,4 +72,332 @@ body {
   background-color: var(--color-highlight-blue);
   border-radius: 2px;
   padding: 0 2px;
+}
+
+/* Animation keyframes */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Hero screenshot staggered entrance animations */
+@keyframes hero-screenshot-1 {
+  from {
+    opacity: 0;
+    transform: rotate(-3deg) translateY(40px) translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-3deg) translateY(0) translateX(0);
+  }
+}
+
+@keyframes hero-screenshot-2 {
+  from {
+    opacity: 0;
+    transform: rotate(2deg) translateY(40px) translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(2deg) translateY(0) translateX(0);
+  }
+}
+
+@keyframes hero-screenshot-3 {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(60px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Feature section scroll-triggered animations */
+@keyframes feature-text-in {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes feature-screenshot-in {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Animation classes */
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Hero screenshot animation classes */
+.animate-hero-screenshot-1 {
+  animation: hero-screenshot-1 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 300ms;
+  opacity: 0;
+}
+
+.animate-hero-screenshot-2 {
+  animation: hero-screenshot-2 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 450ms;
+  opacity: 0;
+}
+
+.animate-hero-screenshot-3 {
+  animation: hero-screenshot-3 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 600ms;
+  opacity: 0;
+}
+
+/* Feature section animation classes */
+.animate-feature-text-in {
+  animation: feature-text-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-feature-screenshot-in {
+  animation: feature-screenshot-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 150ms;
+}
+
+/* Animation delays */
+.animation-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animation-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animation-delay-400 {
+  animation-delay: 400ms;
+}
+
+.animation-delay-500 {
+  animation-delay: 500ms;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-tertiary);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-tertiary) var(--color-bg-secondary);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* Selection styles */
+::selection {
+  background-color: var(--color-accent-primary);
+  color: var(--color-bg-primary);
+}
+
+/* Images display normally */
+img {
+  opacity: 1;
+}
+
+/* Button reset for consistency */
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Link reset */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Transition utilities */
+.transition-fast {
+  transition-duration: var(--animation-fast);
+}
+
+.transition-normal {
+  transition-duration: var(--animation-normal);
+}
+
+.transition-slow {
+  transition-duration: var(--animation-slow);
+}
+
+/* Glass effect utility */
+.glass {
+  background: rgba(28, 25, 23, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Gradient overlay for images */
+.gradient-overlay {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(28, 25, 23, 0.5) 50%,
+    rgba(28, 25, 23, 0.9) 100%
+  );
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.3);
+}
+
+/* Screenshot gallery styles */
+.screenshot-thumbnail {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.screenshot-thumbnail:hover {
+  transform: scale(1.05);
+}
+
+/* Platform tab active state glow */
+.platform-tab-active {
+  box-shadow: 0 0 20px rgba(232, 155, 125, 0.3);
+}
+
+/* Download button pulse */
+.download-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.download-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.download-btn:hover::after {
+  transform: translateX(100%);
+}
+
+/* Responsive font sizes */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
 }

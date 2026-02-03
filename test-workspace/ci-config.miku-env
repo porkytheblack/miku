@@ -1,71 +1,44 @@
 #!miku-env
-# CI/CD Configuration
-# GitHub Actions environment variables
+#@version: 1.0
 
-# ===================
-# Build Settings
 # ===================
 UNITY_VERSION=2022.3.14f1
 BUILD_NAME=EchoesOfTheVoid
 BUILD_NUMBER=${GITHUB_RUN_NUMBER}
 COMMIT_SHA=${GITHUB_SHA}
-
-# ===================
-# Platform Targets
 # ===================
 BUILD_WINDOWS=true
 BUILD_MACOS=true
 BUILD_LINUX=true
 BUILD_WEBGL=false
-
 # ===================
-# Code Signing
-# ===================
-WINDOWS_CERTIFICATE_NAME=Void Studios LLC
-MACOS_SIGNING_IDENTITY=Developer ID Application: Void Studios LLC
+WINDOWS_CERTIFICATE_NAME="Void Studios LLC"
+MACOS_SIGNING_IDENTITY="Developer ID Application: Void Studios LLC"
 MACOS_NOTARIZE=true
 APPLE_ID=${secrets.APPLE_ID}
 APPLE_TEAM_ID=${secrets.APPLE_TEAM_ID}
-
-# ===================
-# Steam Upload
 # ===================
 STEAM_USERNAME=${secrets.STEAM_USERNAME}
 STEAM_CONFIG_VDF=${secrets.STEAM_CONFIG_VDF}
 STEAM_BRANCH_BETA=beta
 STEAM_BRANCH_RELEASE=default
-
-# ===================
-# Itch.io Upload
 # ===================
 ITCH_USERNAME=voidstudios
 ITCH_GAME=echoes-of-the-void
 BUTLER_API_KEY=${secrets.BUTLER_API_KEY}
-
-# ===================
-# Discord Notifications
 # ===================
 DISCORD_WEBHOOK=${secrets.DISCORD_WEBHOOK}
 NOTIFY_ON_SUCCESS=true
 NOTIFY_ON_FAILURE=true
-
-# ===================
-# Testing
 # ===================
 RUN_UNIT_TESTS=true
 RUN_INTEGRATION_TESTS=true
 RUN_PLAYMODE_TESTS=true
 TEST_TIMEOUT_MINUTES=30
-
-# ===================
-# Artifacts
 # ===================
 ARTIFACT_RETENTION_DAYS=30
 UPLOAD_SYMBOLS=true
 SYMBOL_SERVER=https://symbols.echoesofthevoid.com
-
-# ===================
-# Cache
 # ===================
 CACHE_LIBRARY=true
 CACHE_KEY_PREFIX=unity-library-v1
