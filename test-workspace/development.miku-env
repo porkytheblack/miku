@@ -1,0 +1,59 @@
+#!miku-env
+# Development Environment Configuration
+# Echoes of the Void - Local Dev Setup
+
+# ===================
+# Core Settings
+# ===================
+GAME_ENV=development
+DEBUG_MODE=true
+LOG_LEVEL=verbose
+SHOW_FPS=true
+SHOW_DEBUG_OVERLAY=true
+
+# ===================
+# Build Configuration
+# ===================
+BUILD_TARGET=windows
+ENABLE_HOT_RELOAD=true
+ASSET_COMPRESSION=false
+SKIP_INTRO=true
+
+# ===================
+# Gameplay Overrides (Dev Only)
+# ===================
+STARTING_GOLD=999
+UNLOCK_ALL_CARDS=true
+INVINCIBLE_MODE=false
+INSTANT_WIN_KEY=F12
+SKIP_TUTORIALS=true
+
+# ===================
+# Steam Integration
+# ===================
+STEAM_APP_ID=2847291
+STEAM_ENABLED=false
+STEAM_OVERLAY_DISABLED=true
+
+# ===================
+# Analytics (Disabled in Dev)
+# ===================
+ANALYTICS_ENABLED=false
+CRASH_REPORTING=false
+TELEMETRY_ENDPOINT=
+
+# ===================
+# Audio
+# ===================
+FMOD_LIVE_UPDATE=true
+FMOD_PROFILER_PORT=9264
+MASTER_VOLUME=0.5
+MUSIC_VOLUME=0.3
+
+# ===================
+# Paths
+# ===================
+SAVE_DIRECTORY=./dev-saves
+ASSET_PATH=./assets
+MOD_DIRECTORY=./mods
+LOG_PATH=./logs/dev.log

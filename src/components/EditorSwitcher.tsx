@@ -6,11 +6,15 @@ import { useMiku } from '@/context/MikuContext';
 import { detectFileType } from '@/lib/fileTypes';
 import BlockEditor from './BlockEditor';
 import EnvEditor from './EnvEditor';
+import KanbanEditor from './KanbanEditor';
+import DocsEditor from './DocsEditor';
 
 /**
  * EditorSwitcher component
  * Detects the file type of the active document and renders the appropriate editor
  * - .miku-env files -> EnvEditor (no AI, secure)
+ * - .kanban files -> KanbanEditor (kanban board)
+ * - .docs files -> DocsEditor (documentation viewer)
  * - .md files -> BlockEditor (with AI suggestions)
  *
  * IMPORTANT: Uses key prop to force React to completely remount the editor
@@ -37,8 +41,8 @@ export default function EditorSwitcher() {
     return 'markdown';
   }, [activeDocument]);
 
-  // Handle content change from EnvEditor
-  const handleEnvContentChange = useCallback((content: string) => {
+  // Handle content change from custom editors (EnvEditor, KanbanEditor)
+  const handleContentChange = useCallback((content: string) => {
     setContent(content);
   }, [setContent]);
 
@@ -52,7 +56,27 @@ export default function EditorSwitcher() {
       <EnvEditor
         key={editorKey}
         initialContent={activeDocument?.content}
-        onContentChange={handleEnvContentChange}
+        onContentChange={handleContentChange}
+      />
+    );
+  }
+
+  if (fileType === 'kanban') {
+    return (
+      <KanbanEditor
+        key={editorKey}
+        initialContent={activeDocument?.content}
+        onContentChange={handleContentChange}
+      />
+    );
+  }
+
+  if (fileType === 'docs') {
+    return (
+      <DocsEditor
+        key={editorKey}
+        initialContent={activeDocument?.content}
+        onContentChange={handleContentChange}
       />
     );
   }

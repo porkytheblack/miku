@@ -26,6 +26,8 @@ export default function Home() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [isEnvFileDialogOpen, setIsEnvFileDialogOpen] = useState(false);
+  const [isKanbanFileDialogOpen, setIsKanbanFileDialogOpen] = useState(false);
+  const [isDocsFileDialogOpen, setIsDocsFileDialogOpen] = useState(false);
 
   const { workspace, createFile } = useWorkspace();
   const { openDocument } = useDocument();
@@ -86,6 +88,42 @@ export default function Home() {
     setIsEnvFileDialogOpen(false);
   }, [workspace.currentWorkspace, createFile, openDocument]);
 
+  // Handle kanban file name request from command palette
+  const handleRequestKanbanFileName = useCallback(() => {
+    setIsKanbanFileDialogOpen(true);
+  }, []);
+
+  // Handle kanban file creation
+  const handleCreateKanbanFile = useCallback(async (name: string) => {
+    if (workspace.currentWorkspace) {
+      // Ensure the filename ends with .kanban
+      const fileName = name.endsWith('.kanban') ? name : `${name}.kanban`;
+      const filePath = await createFile(fileName, workspace.currentWorkspace.path);
+      if (filePath) {
+        await openDocument(filePath);
+      }
+    }
+    setIsKanbanFileDialogOpen(false);
+  }, [workspace.currentWorkspace, createFile, openDocument]);
+
+  // Handle docs file name request from command palette
+  const handleRequestDocsFileName = useCallback(() => {
+    setIsDocsFileDialogOpen(true);
+  }, []);
+
+  // Handle docs file creation
+  const handleCreateDocsFile = useCallback(async (name: string) => {
+    if (workspace.currentWorkspace) {
+      // Ensure the filename ends with .docs
+      const fileName = name.endsWith('.docs') ? name : `${name}.docs`;
+      const filePath = await createFile(fileName, workspace.currentWorkspace.path);
+      if (filePath) {
+        await openDocument(filePath);
+      }
+    }
+    setIsDocsFileDialogOpen(false);
+  }, [workspace.currentWorkspace, createFile, openDocument]);
+
   // Register global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -138,6 +176,8 @@ export default function Home() {
         onToggleSettings={handleToggleSettings}
         onToggleHelp={handleToggleHelp}
         onRequestEnvFileName={handleRequestEnvFileName}
+        onRequestKanbanFileName={handleRequestKanbanFileName}
+        onRequestDocsFileName={handleRequestDocsFileName}
       />
 
       {/* Settings Panel */}
@@ -171,6 +211,46 @@ export default function Home() {
         cancelLabel="Cancel"
         validate={(value) => {
           // Check for invalid characters in filename
+          if (/[<>:"/\\|?*]/.test(value)) {
+            return 'Filename contains invalid characters';
+          }
+          return null;
+        }}
+      />
+
+      {/* New Kanban File Dialog */}
+      <InputDialog
+        isOpen={isKanbanFileDialogOpen}
+        onClose={() => setIsKanbanFileDialogOpen(false)}
+        onSubmit={handleCreateKanbanFile}
+        title="New Kanban Board"
+        label="Enter a name for the kanban board"
+        placeholder="project-tasks"
+        defaultValue=""
+        suffix=".kanban"
+        submitLabel="Create"
+        cancelLabel="Cancel"
+        validate={(value) => {
+          if (/[<>:"/\\|?*]/.test(value)) {
+            return 'Filename contains invalid characters';
+          }
+          return null;
+        }}
+      />
+
+      {/* New Docs File Dialog */}
+      <InputDialog
+        isOpen={isDocsFileDialogOpen}
+        onClose={() => setIsDocsFileDialogOpen(false)}
+        onSubmit={handleCreateDocsFile}
+        title="New Documentation Collection"
+        label="Enter a name for the documentation collection"
+        placeholder="project-docs"
+        defaultValue=""
+        suffix=".docs"
+        submitLabel="Create"
+        cancelLabel="Cancel"
+        validate={(value) => {
           if (/[<>:"/\\|?*]/.test(value)) {
             return 'Filename contains invalid characters';
           }

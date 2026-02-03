@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Game Design Document",
+    "description": "Core game mechanics and design decisions for Echoes of the Void"
+  },
+  "entries": [
+    {
+      "id": "entry-001",
+      "title": "Core Loop",
+      "content": "## The Roguelike Deckbuilder Core Loop\n\nEchoes of the Void follows a familiar but refined roguelike deckbuilder structure:\n\n1. **Run Start** - Player begins with a starter deck of 10 basic Memory cards\n2. **Sector Navigation** - Choose paths through procedurally generated sectors\n3. **Combat Encounters** - Turn-based card battles against Void entities\n4. **Rewards** - Gain new cards, artifacts, or currency after victories\n5. **Events** - Story moments with meaningful choices\n6. **Boss Battles** - Challenging encounters at sector end\n7. **Death or Victory** - Permadeath with meta-progression unlocks\n\n### What Makes Us Different\n\n- **Void Corruption System**: Cards can become corrupted, gaining power but at a cost\n- **Memory Synergies**: Cards remember being played together, forming bonds\n- **Dynamic Difficulty**: Game adapts to player skill over runs",
+      "tags": ["design", "core-loop"],
+      "createdAt": "2026-01-15T10:00:00Z",
+      "updatedAt": "2026-01-28T14:30:00Z"
+    },
+    {
+      "id": "entry-002",
+      "title": "Card System",
+      "content": "## Memory Cards\n\nCards in Echoes of the Void are called **Memories** - fragments of power left behind by those consumed by the Void.\n\n### Card Types\n\n| Type | Color | Description |\n|------|-------|-------------|\n| Attack | Red | Deal damage to enemies |\n| Defense | Blue | Block incoming damage |\n| Skill | Green | Utility effects, buffs, debuffs |\n| Void | Purple | High risk, high reward corrupted cards |\n| Artifact | Gold | Permanent passive effects |\n\n### Rarity Tiers\n\n- **Common** - Basic effects, easy to find\n- **Uncommon** - Stronger effects, moderate rarity\n- **Rare** - Build-defining powerful cards\n- **Void-Touched** - Corrupted variants with enhanced but dangerous effects\n\n### Memory Bonds\n\nWhen two cards are played consecutively 5+ times in a run, they form a **Memory Bond**. Bonded cards:\n- Cost 1 less energy when played after their bonded partner\n- Gain visual particle effects showing their connection\n- Can unlock special combo effects in later updates",
+      "tags": ["design", "cards", "mechanics"],
+      "createdAt": "2026-01-16T09:00:00Z",
+      "updatedAt": "2026-01-30T11:15:00Z"
+    },
+    {
+      "id": "entry-003",
+      "title": "Combat Flow",
+      "content": "## Turn Structure\n\n### Player Phase\n1. Draw 5 cards (modified by relics/effects)\n2. Gain 3 Energy (base amount)\n3. Play cards from hand\n4. Discard remaining cards\n5. End turn\n\n### Enemy Phase\n1. Execute telegraphed intent\n2. Apply status effects\n3. Advance Void Meter if applicable\n\n## The Void Meter\n\nA global threat mechanic unique to our game:\n\n- Fills slightly each turn (base: 5%)\n- Certain cards/events increase it faster\n- At 100%, a **Void Surge** occurs:\n  - All enemies gain +50% damage for 2 turns\n  - Player draws 1 fewer card\n  - Meter resets to 0\n\nManaging the Void Meter adds strategic depth beyond just winning individual fights.\n\n## Damage Calculation\n\n```\nFinal Damage = (Base Damage + Strength) × Multipliers - Block\n```\n\nStatus effects apply before block calculation.",
+      "tags": ["design", "combat", "mechanics"],
+      "createdAt": "2026-01-17T14:00:00Z",
+      "updatedAt": "2026-02-01T09:45:00Z"
+    },
+    {
+      "id": "entry-004",
+      "title": "Enemy Design Philosophy",
+      "content": "## Design Pillars for Enemies\n\n### 1. Readable Intent\nEvery enemy telegraphs their next action. Players should never feel cheated by unexpected damage.\n\n### 2. Mechanical Identity\nEach enemy type has a clear mechanical hook:\n- **Void Wisps**: Weak alone, dangerous in groups\n- **Memory Eaters**: Steal cards temporarily\n- **Hollow Knights**: High block, telegraphed big attacks\n- **Corruption Spawn**: Spread debuffs, low HP\n\n### 3. Escalating Threat\nEnemies get more dangerous as fights drag on, encouraging aggressive play without being unfair.\n\n## Boss Design\n\nBosses are multi-phase encounters:\n\n**Phase 1**: Learn the patterns\n**Phase 2**: Patterns intensify, new mechanics\n**Phase 3**: Desperate final stand with unique abilities\n\nBosses should feel like puzzles to solve, not DPS checks.",
+      "tags": ["design", "enemies", "balance"],
+      "createdAt": "2026-01-20T11:00:00Z",
+      "updatedAt": "2026-01-29T16:20:00Z"
+    },
+    {
+      "id": "entry-005",
+      "title": "Art Direction",
+      "content": "## Visual Identity\n\n### Color Palette\n- **Primary**: Deep purples and void blacks\n- **Secondary**: Teal accents for UI elements\n- **Accent**: Gold for rewards/positive feedback\n- **Danger**: Crimson for damage/corruption\n\n### Style Keywords\n- Ethereal\n- Minimalist with detail bursts\n- Cosmic horror (subtle, not grotesque)\n- Memory/dream-like quality\n\n## UI Philosophy\n\n- Cards should feel weighty and satisfying to play\n- Information density without clutter\n- Particle effects for feedback, not decoration\n- Consistent iconography across all systems\n\n## Animation Priorities\n\n1. Card play animations (most visible)\n2. Enemy attack telegraphs\n3. Status effect applications\n4. Victory/defeat screens\n5. Meta-progression unlocks",
+      "tags": ["art", "design", "visual"],
+      "createdAt": "2026-01-22T13:30:00Z",
+      "updatedAt": "2026-01-31T10:00:00Z"
+    }
+  ]
+}

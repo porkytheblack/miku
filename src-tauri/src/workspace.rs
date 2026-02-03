@@ -169,10 +169,13 @@ fn list_directory(path: &Path, is_root: bool) -> Pin<Box<dyn Future<Output = Res
                     });
                 }
             } else {
-                // Only include markdown files
+                // Include markdown files, kanban boards, and docs collections
                 if let Some(ext) = entry_path.extension() {
                     let ext_str = ext.to_string_lossy().to_lowercase();
-                    if ext_str == "md" || ext_str == "markdown" || ext_str == "mdown" {
+                    if ext_str == "md" || ext_str == "markdown" || ext_str == "mdown"
+                        || ext_str == "kanban" || ext_str == "miku-kanban"
+                        || ext_str == "docs" || ext_str == "miku-docs"
+                    {
                         files.push(WorkspaceFile {
                             name: file_name,
                             path: entry_path.to_string_lossy().to_string(),

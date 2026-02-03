@@ -6,10 +6,10 @@ import { useDocument } from '@/context/DocumentContext';
 import SettingsPanel from './SettingsPanel';
 
 interface FloatingBarProps {
-  onToggleFileBrowser?: () => void;
+  onToggleFileBrowser?: () => void; // Kept for potential future use, but Cmd+\ is handled in page.tsx
 }
 
-export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
+export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser }: FloatingBarProps) {
   const { state, requestReview } = useMiku();
   const { openDocument, saveDocument, newDoc } = useDocument();
   const [isHovered, setIsHovered] = useState(false);
@@ -31,6 +31,7 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
   }, []);
 
   // Listen for keyboard shortcuts
+  // Note: Cmd+\ is handled globally in page.tsx to avoid duplicate handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + N: New document
@@ -48,17 +49,11 @@ export default function FloatingBar({ onToggleFileBrowser }: FloatingBarProps) {
         e.preventDefault();
         saveDocument();
       }
-      // Cmd/Ctrl + \: Toggle file browser (backslash like Atom)
-      // No Shift required, doesn't conflict with browser shortcuts
-      if ((e.metaKey || e.ctrlKey) && e.key === '\\' && onToggleFileBrowser) {
-        e.preventDefault();
-        onToggleFileBrowser();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [newDoc, openDocument, saveDocument, onToggleFileBrowser]);
+  }, [newDoc, openDocument, saveDocument]);
 
   const isVisible = isHovered || state.status !== 'idle' || showSettings;
 
