@@ -31,6 +31,8 @@ interface RewriteResult {
 
 interface MikuContextType {
   state: MikuState;
+  activeDocumentId: string | null;
+  setActiveDocumentId: (id: string | null) => void;
   requestReview: (text: string, options?: ReviewOptions) => void;
   requestRewrite: (text: string, startIndex: number, endIndex: number) => Promise<RewriteResult | null>;
   setActiveSuggestion: (id: string | null) => void;
@@ -43,6 +45,7 @@ interface MikuContextType {
   isUsingDefaults: boolean;
   reviewedHashes: Set<string>;
   clearReviewedHashes: () => void;
+  clearDocumentState: (documentId: string) => void;
 }
 
 const initialState: MikuState = {
@@ -54,13 +57,92 @@ const initialState: MikuState = {
 
 const MikuContext = createContext<MikuContextType | undefined>(undefined);
 
+// Per-document state storage
+interface DocumentMikuState {
+  suggestions: Suggestion[];
+  activeSuggestionId: string | null;
+  reviewedHashes: Set<string>;
+}
+
 export function MikuProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MikuState>(initialState);
   const [aiConfig, setAIConfigState] = useState<AIProviderConfig | null>(null);
   const [isUsingDefaults, setIsUsingDefaults] = useState(false);
   const [reviewedHashes, setReviewedHashes] = useState<Set<string>>(new Set());
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+
+  // Per-document state storage - keyed by document ID
+  const documentStatesRef = useRef<Map<string, DocumentMikuState>>(new Map());
+
   const agentRef = useRef<MikuAgent | null>(null);
   const initializedRef = useRef(false);
+
+  // Refs to track current state for saving without causing callback reference changes
+  const activeDocumentIdRef = useRef<string | null>(null);
+  const stateRef = useRef<MikuState>(initialState);
+  const reviewedHashesRef = useRef<Set<string>>(new Set());
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    activeDocumentIdRef.current = activeDocumentId;
+  }, [activeDocumentId]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    reviewedHashesRef.current = reviewedHashes;
+  }, [reviewedHashes]);
+
+  // When active document changes, restore that document's state
+  // Uses refs to access current values without adding them as dependencies
+  const handleSetActiveDocumentId = useCallback((id: string | null) => {
+    // Avoid unnecessary updates if ID hasn't changed
+    if (id === activeDocumentIdRef.current) {
+      return;
+    }
+
+    // Save current document's state before switching (using refs for current values)
+    const currentDocId = activeDocumentIdRef.current;
+    if (currentDocId) {
+      documentStatesRef.current.set(currentDocId, {
+        suggestions: stateRef.current.suggestions,
+        activeSuggestionId: stateRef.current.activeSuggestionId,
+        reviewedHashes: new Set(reviewedHashesRef.current),
+      });
+    }
+
+    setActiveDocumentId(id);
+
+    // Restore the new document's state
+    if (id) {
+      const savedState = documentStatesRef.current.get(id);
+      if (savedState) {
+        setState(prev => ({
+          ...prev,
+          suggestions: savedState.suggestions,
+          activeSuggestionId: savedState.activeSuggestionId,
+        }));
+        setReviewedHashes(savedState.reviewedHashes);
+      } else {
+        // New document - reset state
+        setState(prev => ({
+          ...prev,
+          suggestions: [],
+          activeSuggestionId: null,
+          status: 'idle',
+          error: null,
+        }));
+        setReviewedHashes(new Set());
+      }
+    }
+  }, []); // Empty dependency array - callback reference is now stable
+
+  // Clean up document state when document is closed
+  const clearDocumentState = useCallback((documentId: string) => {
+    documentStatesRef.current.delete(documentId);
+  }, []);
 
   // Initialize with defaults on mount
   useEffect(() => {
@@ -289,6 +371,8 @@ export function MikuProvider({ children }: { children: ReactNode }) {
     <MikuContext.Provider
       value={{
         state,
+        activeDocumentId,
+        setActiveDocumentId: handleSetActiveDocumentId,
         requestReview,
         requestRewrite,
         setActiveSuggestion,
@@ -301,6 +385,7 @@ export function MikuProvider({ children }: { children: ReactNode }) {
         isUsingDefaults,
         reviewedHashes,
         clearReviewedHashes,
+        clearDocumentState,
       }}
     >
       {children}

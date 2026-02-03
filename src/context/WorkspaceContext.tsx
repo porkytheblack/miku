@@ -19,6 +19,7 @@ export interface Workspace {
 interface WorkspaceState {
   currentWorkspace: Workspace | null;
   files: WorkspaceFile[];
+  envFiles: WorkspaceFile[];
   recentWorkspaces: Workspace[];
   isLoading: boolean;
 }
@@ -28,6 +29,7 @@ interface WorkspaceContextType {
   selectWorkspace: () => Promise<void>;
   openWorkspace: (path: string) => Promise<void>;
   refreshFiles: () => Promise<void>;
+  refreshEnvFiles: () => Promise<void>;
   createFile: (name: string, parentPath?: string) => Promise<string | null>;
   createFolder: (name: string, parentPath?: string) => Promise<string | null>;
   deleteFile: (path: string) => Promise<void>;
@@ -41,6 +43,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<WorkspaceState>({
     currentWorkspace: null,
     files: [],
+    envFiles: [],
     recentWorkspaces: [],
     isLoading: false,
   });
@@ -65,7 +68,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           const files = await invoke<WorkspaceFile[]>('list_workspace_files', {
             workspacePath: savedWorkspace.path
           });
-          setWorkspace(prev => ({ ...prev, files }));
+          const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
+            workspacePath: savedWorkspace.path
+          });
+          setWorkspace(prev => ({ ...prev, files, envFiles }));
         } else {
           setWorkspace(prev => ({ ...prev, recentWorkspaces }));
         }
@@ -115,12 +121,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         workspacePath
       });
 
+      // Load env files
+      const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
+        workspacePath
+      });
+
       // Get recent workspaces
       const recentWorkspaces = await invoke<Workspace[]>('get_recent_workspaces');
 
       setWorkspace({
         currentWorkspace: workspaceInfo,
         files,
+        envFiles,
         recentWorkspaces,
         isLoading: false,
       });
@@ -148,22 +160,44 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [workspace.currentWorkspace]);
 
+  const refreshEnvFiles = useCallback(async () => {
+    if (!isTauri() || !workspace.currentWorkspace) return;
+
+    try {
+      const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
+        workspacePath: workspace.currentWorkspace.path
+      });
+      setWorkspace(prev => ({ ...prev, envFiles }));
+    } catch (error) {
+      console.error('Failed to refresh env files:', error);
+    }
+  }, [workspace.currentWorkspace]);
+
   const createFile = useCallback(async (name: string, parentPath?: string): Promise<string | null> => {
     if (!isTauri() || !workspace.currentWorkspace) return null;
 
     try {
       const basePath = parentPath || workspace.currentWorkspace.path;
+      // Add .md extension only if the name has no extension
+      // Dotfiles (like .miku-env, .gitignore) and files with extensions should not get .md added
+      const hasExtension = name.startsWith('.') || name.includes('.');
+      const fileName = hasExtension ? name : `${name}.md`;
       const filePath = await invoke<string>('create_file', {
         basePath,
-        name: name.endsWith('.md') ? name : `${name}.md`
+        name: fileName
       });
-      await refreshFiles();
+      // Refresh the appropriate file list based on file type
+      if (fileName.endsWith('.miku-env')) {
+        await refreshEnvFiles();
+      } else {
+        await refreshFiles();
+      }
       return filePath;
     } catch (error) {
       console.error('Failed to create file:', error);
       return null;
     }
-  }, [workspace.currentWorkspace, refreshFiles]);
+  }, [workspace.currentWorkspace, refreshFiles, refreshEnvFiles]);
 
   const createFolder = useCallback(async (name: string, parentPath?: string): Promise<string | null> => {
     if (!isTauri() || !workspace.currentWorkspace) return null;
@@ -208,6 +242,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         selectWorkspace,
         openWorkspace,
         refreshFiles,
+        refreshEnvFiles,
         createFile,
         createFolder,
         deleteFile,

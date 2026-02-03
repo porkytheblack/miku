@@ -5,6 +5,7 @@ import { SettingsProvider } from "@/context/SettingsContext";
 import { MikuProvider } from "@/context/MikuContext";
 import { DocumentProvider } from "@/context/DocumentContext";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
+import { ToastProvider } from "@/context/ToastContext";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -33,7 +34,9 @@ export default function RootLayout({
           <WorkspaceProvider>
             <DocumentProvider>
               <MikuProvider>
-                {children}
+                <ToastProvider position="bottom-right">
+                  {children}
+                </ToastProvider>
               </MikuProvider>
             </DocumentProvider>
           </WorkspaceProvider>

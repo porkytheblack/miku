@@ -6,6 +6,9 @@ import { useSettings } from '@/context/SettingsContext';
 import { useDocument } from '@/context/DocumentContext';
 import { HighlightType, Suggestion } from '@/types';
 import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPosition';
+import { handleSmartFormatting, handleCharacterInput, shouldAutoPair } from '@/lib/markdown/SmartFormatting';
+import { toggleFormatting } from '@/lib/markdown/markdownUtils';
+import { highlightMarkdownSyntax } from '@/components/markdown/MarkdownSyntaxHighlighter';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 
@@ -56,43 +59,18 @@ interface AcceptedRevision {
 export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
-  const { document: docState, setContent: setDocContent } = useDocument();
+  const { setContent: setDocContent, activeDocumentId, registerContentGetter, openDocuments } = useDocument();
+
+  // ============================================
+  // State declarations - all state must be declared before effects
+  // ============================================
+
   const [content, setContentLocal] = useState<string>('');
-
-  // Sync content from DocumentContext when it changes (e.g., file opened)
-  useEffect(() => {
-    if (docState.content !== content) {
-      setContentLocal(docState.content);
-    }
-    // Only sync when document content changes externally
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState.content]);
-
-  // Wrapper to update both local and context state
-  const setContent = useCallback((newContent: string) => {
-    setContentLocal(newContent);
-    setDocContent(newContent);
-  }, [setDocContent]);
+  const [editingDocId, setEditingDocId] = useState<string | null>(activeDocumentId);
   const [lastReviewedContent, setLastReviewedContent] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
-
-  // Track the content that was used for the last review
-  // This is the "source of truth" for suggestion positions
-  const reviewedContentRef = useRef<string>('');
-
-  // Track accepted revisions for undo functionality
   const [acceptedRevisions, setAcceptedRevisions] = useState<AcceptedRevision[]>([]);
-
-  // Expose preview mode and undo to parent (FloatingBar)
   const [canUndo, setCanUndo] = useState(false);
-
-  // Update canUndo when acceptedRevisions changes
-  useEffect(() => {
-    setCanUndo(acceptedRevisions.length > 0);
-  }, [acceptedRevisions]);
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -101,6 +79,109 @@ export default function BlockEditor() {
   const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
   const [slashStartIndex, setSlashStartIndex] = useState<number | null>(null);
   const [slashEndIndex, setSlashEndIndex] = useState<number | null>(null);
+
+  // Syntax highlighting state (always enabled, but can be disabled if needed)
+  const [syntaxHighlightingEnabled] = useState(true);
+
+  // ============================================
+  // Refs - all refs must be declared before effects that use them
+  // ============================================
+
+  const contentRef = useRef<string>('');
+  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const reviewedContentRef = useRef<string>('');
+  // Track the last content loaded from DocumentContext to detect true external changes
+  // (e.g., file opened from disk) vs. content changes from user typing or tab switching
+  const lastLoadedContentRef = useRef<string>('');
+
+  // ============================================
+  // Wrapper to update both local and context state
+  // ============================================
+
+  const setContent = useCallback((newContent: string) => {
+    // Update ref synchronously so content getter always returns current value
+    // This is critical for tab switching - the getter is called before effects run
+    contentRef.current = newContent;
+    setContentLocal(newContent);
+    setDocContent(newContent);
+  }, [setDocContent]);
+
+  // ============================================
+  // Effects for content synchronization and document switching
+  // ============================================
+
+  // Keep contentRef in sync with content state
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
+  // Register content getter with DocumentContext so it can save content before tab switch
+  useEffect(() => {
+    registerContentGetter(() => contentRef.current);
+  }, [registerContentGetter]);
+
+  // Handle document switching - this is the key fix for the tab switching bug
+  // When activeDocumentId changes, the content has already been saved by DocumentContext
+  // via the content getter (called in switchToDocument), so we just need to:
+  // 1. Update our tracking of which document we're editing
+  // 2. Load the new document's content
+  // 3. Reset per-document editor state (undo history, suggestions, etc.)
+  useEffect(() => {
+    if (activeDocumentId !== editingDocId) {
+      setEditingDocId(activeDocumentId);
+      // Get content directly from openDocuments to avoid stale docState
+      // The docState.content is computed from activeDocument which may be stale
+      // during rapid tab switches due to React's batching
+      const targetDoc = openDocuments.find(d => d.id === activeDocumentId);
+      const newContent = targetDoc?.content || '';
+      // Update both the state and the ref for the new document's content
+      // The ref must be updated so that contentGetter returns correct value
+      // if user immediately switches tabs again
+      contentRef.current = newContent;
+      setContentLocal(newContent);
+      // Track this as the last loaded content so we don't re-sync it
+      lastLoadedContentRef.current = newContent;
+
+      // Reset per-document state when switching tabs
+      clearSuggestions();
+      setActiveSuggestion(null);
+      setAcceptedRevisions([]);
+      setLastReviewedContent('');
+      reviewedContentRef.current = '';
+    }
+  }, [activeDocumentId, editingDocId, openDocuments, clearSuggestions, setActiveSuggestion]);
+
+  // Sync content from DocumentContext when it changes externally (e.g., file opened from disk)
+  // This should only trigger when:
+  // 1. We're on the same document (not switching)
+  // 2. The content in context is different from what we last loaded from context
+  // This prevents the bug where stale closures cause content to sync incorrectly during tab switches
+  useEffect(() => {
+    // Only sync if we're editing the active document
+    if (activeDocumentId !== editingDocId) {
+      return;
+    }
+
+    // Get the current document's content directly from openDocuments
+    const currentDoc = openDocuments.find(d => d.id === activeDocumentId);
+    const contextContent = currentDoc?.content || '';
+
+    // Only sync if the context content is different from what we last loaded
+    // This detects true external changes (file opened from disk) vs. our own edits
+    if (contextContent !== lastLoadedContentRef.current && contextContent !== content) {
+      // Update ref along with state for consistency
+      contentRef.current = contextContent;
+      setContentLocal(contextContent);
+      lastLoadedContentRef.current = contextContent;
+    }
+  }, [activeDocumentId, editingDocId, openDocuments, content]);
+
+  // Update canUndo when acceptedRevisions changes
+  useEffect(() => {
+    setCanUndo(acceptedRevisions.length > 0);
+  }, [acceptedRevisions]);
 
   // Sync scroll between textarea and highlight layer
   const syncScroll = useCallback(() => {
@@ -236,17 +317,27 @@ export default function BlockEditor() {
     setSelectedSlashIndex(0);
   }, [slashFilter]);
 
-  // Build highlighted content with suggestion markers
-  // Uses validated positions to ensure highlights match the correct text
+  // Build highlighted content with suggestion markers and syntax highlighting
+  // AI suggestion highlights take precedence over syntax highlighting
   const highlightedHTML = useMemo(() => {
-    if (state.suggestions.length === 0 || !content) {
-      return escapeHtml(content) + '\n';
+    if (!content) {
+      return '\n';
     }
 
     // Validate and fix suggestion positions using the textPosition utilities
     const validSuggestions = validateSuggestionPositions(state.suggestions, content);
-
     const sortedSuggestions = [...validSuggestions].sort((a, b) => a.startIndex - b.startIndex);
+
+    // If no suggestions, just apply syntax highlighting
+    if (sortedSuggestions.length === 0) {
+      if (syntaxHighlightingEnabled) {
+        return highlightMarkdownSyntax(content) + '\n';
+      }
+      return escapeHtml(content) + '\n';
+    }
+
+    // Build HTML with both suggestion highlights and syntax highlighting
+    // Suggestion highlights take precedence
     let html = '';
     let lastIndex = 0;
 
@@ -256,12 +347,17 @@ export default function BlockEditor() {
         continue;
       }
 
-      // Add text before this highlight
+      // Add text before this highlight (with syntax highlighting)
       if (suggestion.startIndex > lastIndex) {
-        html += escapeHtml(content.slice(lastIndex, suggestion.startIndex));
+        const textBefore = content.slice(lastIndex, suggestion.startIndex);
+        if (syntaxHighlightingEnabled) {
+          html += highlightMarkdownSyntax(textBefore);
+        } else {
+          html += escapeHtml(textBefore);
+        }
       }
 
-      // Add the highlighted text
+      // Add the suggestion highlight (no syntax highlighting inside - it takes precedence)
       const highlightText = content.slice(suggestion.startIndex, suggestion.endIndex);
       const isActive = suggestion.id === state.activeSuggestionId;
       html += `<mark data-suggestion-id="${suggestion.id}" style="background-color: ${getHighlightColor(suggestion.type)}; border-radius: 2px; cursor: pointer; pointer-events: auto; ${isActive ? 'outline: 2px solid var(--accent-primary);' : ''}">${escapeHtml(highlightText)}</mark>`;
@@ -269,13 +365,18 @@ export default function BlockEditor() {
       lastIndex = suggestion.endIndex;
     }
 
-    // Add remaining text after last highlight
+    // Add remaining text after last highlight (with syntax highlighting)
     if (lastIndex < content.length) {
-      html += escapeHtml(content.slice(lastIndex));
+      const textAfter = content.slice(lastIndex);
+      if (syntaxHighlightingEnabled) {
+        html += highlightMarkdownSyntax(textAfter);
+      } else {
+        html += escapeHtml(textAfter);
+      }
     }
 
     return html + '\n';
-  }, [content, state.suggestions, state.activeSuggestionId]);
+  }, [content, state.suggestions, state.activeSuggestionId, syntaxHighlightingEnabled]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
@@ -298,13 +399,92 @@ export default function BlockEditor() {
         setSlashEndIndex(cursorPos);
       }
     }
-  }, [slashStartIndex]);
+  }, [slashStartIndex, setContent]);
+
+  const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
+    if (slashStartIndex === null || !textareaRef.current) return;
+
+    const textarea = textareaRef.current;
+    // Use stored end index, or fall back to right after the slash
+    const endPos = slashEndIndex ?? (slashStartIndex + 1);
+
+    // Remove the slash and any filter text
+    const beforeSlash = content.slice(0, slashStartIndex);
+    const afterCursor = content.slice(endPos);
+
+    const newContent = beforeSlash + command.prefix + afterCursor;
+    setContent(newContent);
+
+    // Set cursor position after the inserted prefix
+    setTimeout(() => {
+      const newCursorPos = slashStartIndex + command.prefix.length;
+      textarea.selectionStart = newCursorPos;
+      textarea.selectionEnd = newCursorPos;
+      textarea.focus();
+    }, 0);
+
+    setShowSlashMenu(false);
+    setSlashStartIndex(null);
+    setSlashEndIndex(null);
+    setSlashFilter('');
+  }, [content, slashStartIndex, slashEndIndex, setContent]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const cursorPos = textarea.selectionStart;
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+
     // Handle Cmd+Enter for manual review
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       triggerManualReview();
+      return;
+    }
+
+    // Handle Cmd+B for bold (exclude Shift to allow Cmd+Shift+B for file browser)
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'b') {
+      e.preventDefault();
+      const result = toggleFormatting(content, selectionStart, selectionEnd, 'bold');
+      setContent(result.newText);
+      setTimeout(() => {
+        textarea.setSelectionRange(result.newSelectionStart, result.newSelectionEnd);
+      }, 0);
+      return;
+    }
+
+    // Handle Cmd+I for italic (exclude Shift to prevent future conflicts)
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'i') {
+      e.preventDefault();
+      const result = toggleFormatting(content, selectionStart, selectionEnd, 'italic');
+      setContent(result.newText);
+      setTimeout(() => {
+        textarea.setSelectionRange(result.newSelectionStart, result.newSelectionEnd);
+      }, 0);
+      return;
+    }
+
+    // Handle Cmd+` for inline code (exclude Shift to prevent future conflicts)
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === '`') {
+      e.preventDefault();
+      const result = toggleFormatting(content, selectionStart, selectionEnd, 'code');
+      setContent(result.newText);
+      setTimeout(() => {
+        textarea.setSelectionRange(result.newSelectionStart, result.newSelectionEnd);
+      }, 0);
+      return;
+    }
+
+    // Handle Cmd+Shift+S for strikethrough
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 's') {
+      e.preventDefault();
+      const result = toggleFormatting(content, selectionStart, selectionEnd, 'strikethrough');
+      setContent(result.newText);
+      setTimeout(() => {
+        textarea.setSelectionRange(result.newSelectionStart, result.newSelectionEnd);
+      }, 0);
       return;
     }
 
@@ -337,64 +517,78 @@ export default function BlockEditor() {
       }
     }
 
-    // Detect slash at start of line
-    if (e.key === '/') {
-      const textarea = textareaRef.current;
-      if (textarea) {
-        const cursorPos = textarea.selectionStart;
-        const textBefore = content.slice(0, cursorPos);
-        const lineStart = textBefore.lastIndexOf('\n') + 1;
-        const lineContent = textBefore.slice(lineStart);
+    // Handle smart formatting (Enter for list continuation, Tab for indentation, etc.)
+    const smartResult = handleSmartFormatting(
+      e.nativeEvent,
+      content,
+      cursorPos,
+      selectionStart,
+      selectionEnd
+    );
 
-        // Only show menu if slash is at start of line or after whitespace
-        if (lineContent.trim() === '') {
-          // Calculate position for the menu
-          const rect = textarea.getBoundingClientRect();
-          const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
-          const lines = textBefore.split('\n').length;
-
-          setSlashMenuPosition({
-            top: rect.top + (lines * lineHeight) - textarea.scrollTop + 24,
-            left: rect.left + 24,
-          });
-          setSlashStartIndex(cursorPos);
-          // The slash hasn't been added yet, so end index will be cursorPos + 1 after it's typed
-          setSlashEndIndex(cursorPos + 1);
-          setShowSlashMenu(true);
-          setSlashFilter('');
-          setSelectedSlashIndex(0);
+    if (smartResult.handled && smartResult.preventDefault) {
+      e.preventDefault();
+      if (smartResult.newContent !== undefined) {
+        setContent(smartResult.newContent);
+        if (smartResult.newCursorPosition !== undefined) {
+          setTimeout(() => {
+            textarea.setSelectionRange(smartResult.newCursorPosition!, smartResult.newCursorPosition!);
+          }, 0);
         }
       }
+      return;
     }
-  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview]);
 
-  const insertSlashCommand = useCallback((command: typeof SLASH_COMMANDS[0]) => {
-    if (slashStartIndex === null || !textareaRef.current) return;
+    // Detect slash at start of line
+    if (e.key === '/') {
+      const textBefore = content.slice(0, cursorPos);
+      const lineStart = textBefore.lastIndexOf('\n') + 1;
+      const lineContent = textBefore.slice(lineStart);
 
-    const textarea = textareaRef.current;
-    // Use stored end index, or fall back to right after the slash
-    const endPos = slashEndIndex ?? (slashStartIndex + 1);
+      // Only show menu if slash is at start of line or after whitespace
+      if (lineContent.trim() === '') {
+        // Calculate position for the menu
+        const rect = textarea.getBoundingClientRect();
+        const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
+        const lines = textBefore.split('\n').length;
 
-    // Remove the slash and any filter text
-    const beforeSlash = content.slice(0, slashStartIndex);
-    const afterCursor = content.slice(endPos);
+        setSlashMenuPosition({
+          top: rect.top + (lines * lineHeight) - textarea.scrollTop + 24,
+          left: rect.left + 24,
+        });
+        setSlashStartIndex(cursorPos);
+        // The slash hasn't been added yet, so end index will be cursorPos + 1 after it's typed
+        setSlashEndIndex(cursorPos + 1);
+        setShowSlashMenu(true);
+        setSlashFilter('');
+        setSelectedSlashIndex(0);
+      }
+    }
 
-    const newContent = beforeSlash + command.prefix + afterCursor;
-    setContent(newContent);
+    // Handle auto-pairing for characters that should be paired before input
+    if (e.key.length === 1 && shouldAutoPair(e.key)) {
+      const autoPairResult = handleCharacterInput(
+        content,
+        cursorPos,
+        selectionStart,
+        selectionEnd,
+        e.key
+      );
 
-    // Set cursor position after the inserted prefix
-    setTimeout(() => {
-      const newCursorPos = slashStartIndex + command.prefix.length;
-      textarea.selectionStart = newCursorPos;
-      textarea.selectionEnd = newCursorPos;
-      textarea.focus();
-    }, 0);
-
-    setShowSlashMenu(false);
-    setSlashStartIndex(null);
-    setSlashEndIndex(null);
-    setSlashFilter('');
-  }, [content, slashStartIndex, slashEndIndex]);
+      if (autoPairResult.handled && autoPairResult.preventDefault) {
+        e.preventDefault();
+        if (autoPairResult.newContent !== undefined) {
+          setContent(autoPairResult.newContent);
+          if (autoPairResult.newCursorPosition !== undefined) {
+            setTimeout(() => {
+              textarea.setSelectionRange(autoPairResult.newCursorPosition!, autoPairResult.newCursorPosition!);
+            }, 0);
+          }
+        }
+        return;
+      }
+    }
+  }, [showSlashMenu, filteredCommands, selectedSlashIndex, content, triggerManualReview, setContent, insertSlashCommand]);
 
   const handleHighlightClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -481,7 +675,7 @@ export default function BlockEditor() {
 
     setContent(newContent);
     // Don't reset lastReviewedContent - keep it so we don't re-review
-  }, [content, state.suggestions, acceptSuggestion, updateSuggestions]);
+  }, [content, state.suggestions, acceptSuggestion, updateSuggestions, setContent]);
 
   // Undo the last accepted suggestion or rewrite
   const handleUndo = useCallback(() => {
@@ -555,7 +749,7 @@ export default function BlockEditor() {
 
     setContent(newContent);
     setLastReviewedContent('');
-  }, [content, acceptedRevisions, state.suggestions, updateSuggestions]);
+  }, [content, acceptedRevisions, state.suggestions, updateSuggestions, setContent]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissSuggestion(id);
@@ -624,7 +818,7 @@ export default function BlockEditor() {
 
     setContent(currentContent);
     setActiveSuggestion(null);
-  }, [content, state.suggestions, clearSuggestions, setActiveSuggestion]);
+  }, [content, state.suggestions, clearSuggestions, setActiveSuggestion, setContent]);
 
   // Decline all suggestions
   const handleDeclineAll = useCallback(() => {
@@ -692,7 +886,7 @@ export default function BlockEditor() {
         }
       }, 0);
     }
-  }, [content, requestRewrite]);
+  }, [content, requestRewrite, setContent]);
 
   // Listen for events from FloatingBar and keyboard shortcuts
   useEffect(() => {
