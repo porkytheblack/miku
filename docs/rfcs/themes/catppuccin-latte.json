@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "catppuccin-latte",
+  "name": "Catppuccin Latte",
+  "description": "Soothing pastel theme for the high-spirited - lightest flavor",
+  "author": {
+    "name": "Catppuccin",
+    "url": "https://github.com/catppuccin"
+  },
+  "variant": "light",
+  "homepage": "https://catppuccin.com",
+  "colors": {
+    "background": {
+      "primary": "#eff1f5",
+      "secondary": "#e6e9ef",
+      "tertiary": "#ccd0da"
+    },
+    "text": {
+      "primary": "#4c4f69",
+      "secondary": "#5c5f77",
+      "tertiary": "#9ca0b0"
+    },
+    "accent": {
+      "primary": "#8839ef",
+      "subtle": "#e6e9ef"
+    },
+    "border": {
+      "default": "#ccd0da",
+      "subtle": "#e6e9ef",
+      "focus": "#8839ef"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(76, 79, 105, 0.08)",
+      "md": "0 4px 12px rgba(76, 79, 105, 0.12)",
+      "lg": "0 8px 24px rgba(76, 79, 105, 0.16)"
+    },
+    "highlights": {
+      "clarity": "rgba(223, 142, 29, 0.25)",
+      "grammar": "rgba(210, 15, 57, 0.2)",
+      "style": "rgba(30, 102, 245, 0.2)",
+      "structure": "rgba(136, 57, 239, 0.2)",
+      "economy": "rgba(64, 160, 43, 0.2)"
+    },
+    "syntax": {
+      "heading": "#8839ef",
+      "emphasis": "#5c5f77",
+      "codeBackground": "#ccd0da",
+      "codeText": "#d20f39",
+      "link": "#1e66f5",
+      "listMarker": "#9ca0b0"
+    }
+  }
+}

@@ -1,17 +1,24 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { EditorSettings, DEFAULT_KEYBOARD_SOUND_SETTINGS } from '@/types';
+import {
+  EditorSettings,
+  DEFAULT_KEYBOARD_SOUND_SETTINGS,
+  ThemePreference,
+  DEFAULT_THEME_PREFERENCE,
+  LegacyTheme,
+} from '@/types';
 import { isTauri, loadSettings, saveSettings, toBackendSettings, toFrontendSettings } from '@/lib/tauri';
 
 interface SettingsContextType {
   settings: EditorSettings;
   updateSettings: (settings: Partial<EditorSettings>) => void;
+  /** Resolved theme variant based on themePreference */
   resolvedTheme: 'light' | 'dark';
 }
 
 const defaultSettings: EditorSettings = {
-  theme: 'system',
+  themePreference: DEFAULT_THEME_PREFERENCE,
   fontSize: 16,
   lineHeight: 1.6,
   editorWidth: 720,
@@ -22,6 +29,32 @@ const defaultSettings: EditorSettings = {
   soundEnabled: true,
   keyboardSounds: DEFAULT_KEYBOARD_SOUND_SETTINGS,
 };
+
+/**
+ * Migrate old theme setting to new themePreference format.
+ */
+function migrateThemeSettings(settings: Partial<EditorSettings>): EditorSettings {
+  const result = { ...defaultSettings, ...settings };
+
+  // Migration: convert legacy theme to themePreference
+  if (settings.theme && !settings.themePreference) {
+    const legacyTheme = settings.theme as LegacyTheme;
+    result.themePreference = {
+      selected: legacyTheme === 'system' ? 'system' : legacyTheme,
+      lightFallback: 'light',
+      darkFallback: 'dark',
+    };
+    // Remove the legacy field after migration
+    delete result.theme;
+  }
+
+  // Ensure themePreference exists
+  if (!result.themePreference) {
+    result.themePreference = DEFAULT_THEME_PREFERENCE;
+  }
+
+  return result;
+}
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
@@ -39,7 +72,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         // Load from Tauri backend
         try {
           const backendSettings = await loadSettings();
-          setSettings(toFrontendSettings(backendSettings));
+          const frontendSettings = toFrontendSettings(backendSettings);
+          setSettings(migrateThemeSettings(frontendSettings));
         } catch {
           // Fall back to defaults
           setSettings(defaultSettings);
@@ -49,7 +83,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const saved = localStorage.getItem('miku-settings');
         if (saved) {
           try {
-            setSettings({ ...defaultSettings, ...JSON.parse(saved) });
+            const parsed = JSON.parse(saved);
+            setSettings(migrateThemeSettings(parsed));
           } catch {
             // Invalid JSON, use defaults
           }
@@ -81,20 +116,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const updateTheme = () => {
       let theme: 'light' | 'dark' = 'light';
+      const { themePreference } = settings;
 
-      if (settings.theme === 'system') {
-        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      if (themePreference.selected === 'system') {
+        // Use fallback based on system preference
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const fallbackId = systemDark ? themePreference.darkFallback : themePreference.lightFallback;
+        // Determine variant from fallback theme ID
+        // For builtin themes, the ID matches the variant
+        // For other themes, we check if 'dark' or 'light' is in the name
+        theme = fallbackId.includes('dark') || fallbackId === 'dark' ? 'dark' : 'light';
       } else {
-        theme = settings.theme;
+        // Direct theme selection
+        const selectedId = themePreference.selected;
+        theme = selectedId.includes('dark') || selectedId === 'dark' ? 'dark' : 'light';
       }
 
       setResolvedTheme(theme);
 
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      // Note: The actual theme application is handled by ThemeContext
+      // We only track resolvedTheme here for backward compatibility
     };
 
     updateTheme();
@@ -103,7 +144,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     mediaQuery.addEventListener('change', updateTheme);
 
     return () => mediaQuery.removeEventListener('change', updateTheme);
-  }, [settings.theme]);
+  }, [settings.themePreference]);
 
   const updateSettings = useCallback((newSettings: Partial<EditorSettings>) => {
     setSettings(prev => {

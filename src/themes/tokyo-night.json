@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "tokyo-night",
+  "name": "Tokyo Night",
+  "description": "A clean dark theme inspired by Tokyo city lights",
+  "author": {
+    "name": "enkia",
+    "url": "https://github.com/enkia/tokyo-night-vscode-theme"
+  },
+  "variant": "dark",
+  "homepage": "https://github.com/enkia/tokyo-night-vscode-theme",
+  "colors": {
+    "background": {
+      "primary": "#1a1b26",
+      "secondary": "#24283b",
+      "tertiary": "#414868"
+    },
+    "text": {
+      "primary": "#c0caf5",
+      "secondary": "#a9b1d6",
+      "tertiary": "#565f89"
+    },
+    "accent": {
+      "primary": "#7aa2f7",
+      "subtle": "#24283b"
+    },
+    "border": {
+      "default": "#414868",
+      "subtle": "#24283b",
+      "focus": "#7aa2f7"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "md": "0 4px 12px rgba(0, 0, 0, 0.4)",
+      "lg": "0 8px 24px rgba(0, 0, 0, 0.5)"
+    },
+    "highlights": {
+      "clarity": "rgba(224, 175, 104, 0.3)",
+      "grammar": "rgba(247, 118, 142, 0.3)",
+      "style": "rgba(122, 162, 247, 0.3)",
+      "structure": "rgba(187, 154, 247, 0.3)",
+      "economy": "rgba(158, 206, 106, 0.3)"
+    },
+    "syntax": {
+      "heading": "#7aa2f7",
+      "emphasis": "#a9b1d6",
+      "codeBackground": "#414868",
+      "codeText": "#f7768e",
+      "link": "#73daca",
+      "listMarker": "#565f89"
+    }
+  }
+}

@@ -44,7 +44,7 @@ export default function EnvTable({
   };
 
   return (
-    <div style={{ flex: 1, overflow: 'auto' }}>
+    <div style={{ flex: 1, overflow: 'auto', paddingBottom: '80px' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead
           style={{

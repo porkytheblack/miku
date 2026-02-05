@@ -204,7 +204,9 @@ export function handleEnterKey(
 }
 
 /**
- * Handle Tab key for list indentation
+ * Handle Tab key for indentation
+ * - On list items: indents/outdents the list item
+ * - On regular lines: inserts spaces at cursor position
  */
 export function handleTabKey(
   content: string,
@@ -213,31 +215,85 @@ export function handleTabKey(
 ): SmartFormattingResult {
   const { line, lineStart, lineEnd } = getLineAtPosition(content, cursorPosition);
 
-  // Don't interfere inside code blocks
+  // Don't interfere inside code blocks - let them handle Tab naturally
   if (isInsideCodeBlock(content, cursorPosition)) {
-    return { handled: false };
+    // Still prevent default to avoid losing focus, but insert tab/spaces
+    const indentUnit = '  '; // 2 spaces
+    if (shiftKey) {
+      // In code blocks, Shift+Tab does nothing special
+      return { handled: true, preventDefault: true };
+    }
+    const newContent =
+      content.slice(0, cursorPosition) +
+      indentUnit +
+      content.slice(cursorPosition);
+    return {
+      handled: true,
+      newContent,
+      newCursorPosition: cursorPosition + indentUnit.length,
+      preventDefault: true,
+    };
   }
+
+  const indentUnit = '  '; // 2 spaces per indent level
 
   // Check if we're on a list item
   const listMatch = line.match(/^(\s*)([-*+]|\d+\.)\s/);
-  if (!listMatch) {
-    return { handled: false };
+
+  if (listMatch) {
+    // List item handling: indent/outdent the whole line
+    const [, currentIndent] = listMatch;
+
+    if (shiftKey) {
+      // Outdent: remove one level of indentation
+      if (currentIndent.length >= indentUnit.length) {
+        const newIndent = currentIndent.slice(indentUnit.length);
+        const newLine = newIndent + line.slice(currentIndent.length);
+        const newContent =
+          content.slice(0, lineStart) +
+          newLine +
+          content.slice(lineEnd);
+        const newCursorPosition = Math.max(
+          lineStart + newIndent.length,
+          cursorPosition - indentUnit.length
+        );
+        return {
+          handled: true,
+          newContent,
+          newCursorPosition,
+          preventDefault: true,
+        };
+      }
+      // Can't outdent further, but still prevent focus loss
+      return { handled: true, preventDefault: true };
+    } else {
+      // Indent: add one level of indentation to the line
+      const newLine = indentUnit + line;
+      const newContent =
+        content.slice(0, lineStart) +
+        newLine +
+        content.slice(lineEnd);
+      return {
+        handled: true,
+        newContent,
+        newCursorPosition: cursorPosition + indentUnit.length,
+        preventDefault: true,
+      };
+    }
   }
 
-  const [, currentIndent] = listMatch;
-  const indentUnit = '  '; // 2 spaces per indent level
-
+  // Non-list lines: insert spaces at cursor position
   if (shiftKey) {
-    // Outdent: remove one level of indentation
-    if (currentIndent.length >= indentUnit.length) {
-      const newIndent = currentIndent.slice(indentUnit.length);
-      const newLine = newIndent + line.slice(currentIndent.length);
+    // Shift+Tab on non-list lines: try to remove leading indentation
+    const leadingWhitespace = line.match(/^(\s*)/)?.[1] || '';
+    if (leadingWhitespace.length >= indentUnit.length) {
+      const newLine = line.slice(indentUnit.length);
       const newContent =
         content.slice(0, lineStart) +
         newLine +
         content.slice(lineEnd);
       const newCursorPosition = Math.max(
-        lineStart + newIndent.length,
+        lineStart,
         cursorPosition - indentUnit.length
       );
       return {
@@ -247,22 +303,21 @@ export function handleTabKey(
         preventDefault: true,
       };
     }
-  } else {
-    // Indent: add one level of indentation
-    const newLine = indentUnit + line;
-    const newContent =
-      content.slice(0, lineStart) +
-      newLine +
-      content.slice(lineEnd);
-    return {
-      handled: true,
-      newContent,
-      newCursorPosition: cursorPosition + indentUnit.length,
-      preventDefault: true,
-    };
+    // Can't outdent further, but still prevent focus loss
+    return { handled: true, preventDefault: true };
   }
 
-  return { handled: false };
+  // Regular Tab: insert spaces at cursor position
+  const newContent =
+    content.slice(0, cursorPosition) +
+    indentUnit +
+    content.slice(cursorPosition);
+  return {
+    handled: true,
+    newContent,
+    newCursorPosition: cursorPosition + indentUnit.length,
+    preventDefault: true,
+  };
 }
 
 /**

@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "catppuccin-mocha",
+  "name": "Catppuccin Mocha",
+  "description": "Soothing pastel theme for the high-spirited - darkest variant",
+  "author": {
+    "name": "Catppuccin",
+    "url": "https://github.com/catppuccin/catppuccin"
+  },
+  "variant": "dark",
+  "homepage": "https://catppuccin.com",
+  "colors": {
+    "background": {
+      "primary": "#1e1e2e",
+      "secondary": "#313244",
+      "tertiary": "#45475a"
+    },
+    "text": {
+      "primary": "#cdd6f4",
+      "secondary": "#bac2de",
+      "tertiary": "#6c7086"
+    },
+    "accent": {
+      "primary": "#cba6f7",
+      "subtle": "#313244"
+    },
+    "border": {
+      "default": "#45475a",
+      "subtle": "#313244",
+      "focus": "#cba6f7"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "md": "0 4px 12px rgba(0, 0, 0, 0.4)",
+      "lg": "0 8px 24px rgba(0, 0, 0, 0.5)"
+    },
+    "highlights": {
+      "clarity": "rgba(249, 226, 175, 0.3)",
+      "grammar": "rgba(243, 139, 168, 0.3)",
+      "style": "rgba(137, 180, 250, 0.3)",
+      "structure": "rgba(203, 166, 247, 0.3)",
+      "economy": "rgba(166, 227, 161, 0.3)"
+    },
+    "syntax": {
+      "heading": "#cba6f7",
+      "emphasis": "#bac2de",
+      "codeBackground": "#45475a",
+      "codeText": "#f38ba8",
+      "link": "#89b4fa",
+      "listMarker": "#6c7086"
+    }
+  }
+}

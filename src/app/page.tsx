@@ -8,11 +8,13 @@ import FileBrowser from "@/components/FileBrowser";
 import TopBar from "@/components/TopBar";
 import SoundNotifier from "@/components/SoundNotifier";
 import CommandPalette from "@/components/CommandPalette";
+import GlobalSearch from "@/components/GlobalSearch";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import InputDialog from "@/components/ui/InputDialog";
 import UpdateNotification from "@/components/ui/UpdateNotification";
 import SettingsPanel from "@/components/SettingsPanel";
 import AutoSaveManager from "@/components/AutoSaveManager";
+import ExternalLinkHandler from "@/components/ExternalLinkHandler";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useDocument } from "@/context/DocumentContext";
 
@@ -24,6 +26,7 @@ interface PendingConfirm {
 export default function Home() {
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
@@ -32,7 +35,7 @@ export default function Home() {
   const [isDocsFileDialogOpen, setIsDocsFileDialogOpen] = useState(false);
 
   const { workspace, createFile } = useWorkspace();
-  const { openDocument } = useDocument();
+  const { openDocument, openDocuments, switchToDocument } = useDocument();
 
   // Toggle file browser with Cmd+B
   const handleToggleFileBrowser = useCallback(() => {
@@ -135,20 +138,43 @@ export default function Home() {
         setIsCommandPaletteOpen(prev => !prev);
       }
 
+      // Cmd+P: Global search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        setIsGlobalSearchOpen(prev => !prev);
+      }
+
       // Cmd+\: Toggle file browser (backslash like Atom)
       // No Shift required, doesn't conflict with browser shortcuts
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault();
         setIsFileBrowserOpen(prev => !prev);
       }
+
+      // Cmd+1 through Cmd+9: Switch to tab by position
+      // This is a common pattern in browsers and code editors
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+        const tabIndex = parseInt(e.key, 10) - 1; // Convert to 0-based index
+        if (tabIndex < openDocuments.length) {
+          e.preventDefault();
+          switchToDocument(openDocuments[tabIndex].id);
+        }
+      }
+
+      // Cmd+,: Toggle settings (standard Mac shortcut for preferences)
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [openDocuments, switchToDocument]);
 
   return (
     <main className="relative h-screen flex flex-col overflow-hidden">
+      <ExternalLinkHandler />
       <AutoSaveManager />
       <SoundNotifier />
       <UpdateNotification />
@@ -182,6 +208,16 @@ export default function Home() {
         onRequestEnvFileName={handleRequestEnvFileName}
         onRequestKanbanFileName={handleRequestKanbanFileName}
         onRequestDocsFileName={handleRequestDocsFileName}
+        onToggleGlobalSearch={() => {
+          setIsCommandPaletteOpen(false);
+          setIsGlobalSearchOpen(true);
+        }}
+      />
+
+      {/* Global Search */}
+      <GlobalSearch
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
       />
 
       {/* Settings Panel */}

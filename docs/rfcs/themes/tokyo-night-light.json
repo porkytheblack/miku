@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "tokyo-night-light",
+  "name": "Tokyo Night Light",
+  "description": "A clean, light theme inspired by Tokyo's daytime aesthetic",
+  "author": {
+    "name": "enkia",
+    "url": "https://github.com/enkia"
+  },
+  "variant": "light",
+  "homepage": "https://github.com/enkia/tokyo-night-vscode-theme",
+  "colors": {
+    "background": {
+      "primary": "#d5d6db",
+      "secondary": "#cbccd1",
+      "tertiary": "#b4b5b9"
+    },
+    "text": {
+      "primary": "#343b58",
+      "secondary": "#4c505e",
+      "tertiary": "#9699a3"
+    },
+    "accent": {
+      "primary": "#34548a",
+      "subtle": "#cbccd1"
+    },
+    "border": {
+      "default": "#b4b5b9",
+      "subtle": "#cbccd1",
+      "focus": "#34548a"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(52, 59, 88, 0.08)",
+      "md": "0 4px 12px rgba(52, 59, 88, 0.12)",
+      "lg": "0 8px 24px rgba(52, 59, 88, 0.16)"
+    },
+    "highlights": {
+      "clarity": "rgba(150, 108, 44, 0.25)",
+      "grammar": "rgba(143, 53, 73, 0.2)",
+      "style": "rgba(52, 84, 138, 0.2)",
+      "structure": "rgba(90, 74, 120, 0.2)",
+      "economy": "rgba(72, 94, 45, 0.2)"
+    },
+    "syntax": {
+      "heading": "#34548a",
+      "emphasis": "#4c505e",
+      "codeBackground": "#b4b5b9",
+      "codeText": "#8c4351",
+      "link": "#166775",
+      "listMarker": "#9699a3"
+    }
+  }
+}

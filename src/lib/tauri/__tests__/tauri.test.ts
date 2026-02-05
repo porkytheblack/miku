@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { isTauri, safeTauriCall, toBackendSettings, toFrontendSettings } from '../index';
-import type { EditorSettings } from '../commands';
+import type { EditorSettingsBackend } from '../commands';
 
 // Helper to safely access window
 const getWindow = () => window as Window & typeof globalThis & { __TAURI_INTERNALS__?: unknown };
@@ -66,7 +66,11 @@ describe('Tauri utilities', () => {
   describe('toBackendSettings', () => {
     it('converts frontend settings to backend format', () => {
       const frontendSettings = {
-        theme: 'dark',
+        themePreference: {
+          selected: 'dark',
+          lightFallback: 'light',
+          darkFallback: 'dark',
+        },
         fontSize: 18,
         lineHeight: 1.8,
         editorWidth: 800,
@@ -87,7 +91,12 @@ describe('Tauri utilities', () => {
       const result = toBackendSettings(frontendSettings);
 
       expect(result).toEqual({
-        theme: 'dark',
+        theme: null, // Deprecated field
+        theme_preference: {
+          selected: 'dark',
+          light_fallback: 'light',
+          dark_fallback: 'dark',
+        },
         font_size: 18,
         line_height: 1.8,
         editor_width: 800,
@@ -108,7 +117,11 @@ describe('Tauri utilities', () => {
 
     it('handles empty strings', () => {
       const frontendSettings = {
-        theme: 'system',
+        themePreference: {
+          selected: 'system',
+          lightFallback: 'light',
+          darkFallback: 'dark',
+        },
         fontSize: 16,
         lineHeight: 1.6,
         editorWidth: 720,
@@ -134,8 +147,13 @@ describe('Tauri utilities', () => {
 
   describe('toFrontendSettings', () => {
     it('converts backend settings to frontend format', () => {
-      const backendSettings: EditorSettings = {
-        theme: 'dark',
+      const backendSettings: EditorSettingsBackend = {
+        theme: null,
+        theme_preference: {
+          selected: 'dark',
+          light_fallback: 'light',
+          dark_fallback: 'dark',
+        },
         font_size: 18,
         line_height: 1.8,
         editor_width: 800,
@@ -156,7 +174,12 @@ describe('Tauri utilities', () => {
       const result = toFrontendSettings(backendSettings);
 
       expect(result).toEqual({
-        theme: 'dark',
+        theme: null,
+        themePreference: {
+          selected: 'dark',
+          lightFallback: 'light',
+          darkFallback: 'dark',
+        },
         fontSize: 18,
         lineHeight: 1.8,
         editorWidth: 800,
@@ -175,9 +198,14 @@ describe('Tauri utilities', () => {
       });
     });
 
-    it('handles system theme', () => {
-      const backendSettings: EditorSettings = {
-        theme: 'system',
+    it('handles system theme preference', () => {
+      const backendSettings: EditorSettingsBackend = {
+        theme: null,
+        theme_preference: {
+          selected: 'system',
+          light_fallback: 'light',
+          dark_fallback: 'dark',
+        },
         font_size: 16,
         line_height: 1.6,
         editor_width: 720,
@@ -197,13 +225,18 @@ describe('Tauri utilities', () => {
 
       const result = toFrontendSettings(backendSettings);
 
-      expect(result.theme).toBe('system');
+      expect(result.themePreference.selected).toBe('system');
     });
 
     it('provides default keyboard sounds when missing from backend', () => {
       // Simulate old settings without keyboard_sounds field
       const backendSettings = {
-        theme: 'light',
+        theme: null,
+        theme_preference: {
+          selected: 'light',
+          light_fallback: 'light',
+          dark_fallback: 'dark',
+        },
         font_size: 16,
         line_height: 1.6,
         editor_width: 720,
@@ -212,7 +245,7 @@ describe('Tauri utilities', () => {
         aggressiveness: 'balanced',
         writing_context: '',
         sound_enabled: true,
-      } as EditorSettings;
+      } as EditorSettingsBackend;
 
       const result = toFrontendSettings(backendSettings);
 
@@ -224,12 +257,37 @@ describe('Tauri utilities', () => {
         pitchVariation: 0.02,
       });
     });
+
+    it('migrates legacy theme to theme_preference', () => {
+      // Simulate old settings with only legacy theme field
+      const backendSettings = {
+        theme: 'dark',
+        font_size: 16,
+        line_height: 1.6,
+        editor_width: 720,
+        font_family: 'mono',
+        review_mode: 'manual',
+        aggressiveness: 'balanced',
+        writing_context: '',
+        sound_enabled: true,
+      } as unknown as EditorSettingsBackend;
+
+      const result = toFrontendSettings(backendSettings);
+
+      expect(result.themePreference.selected).toBe('dark');
+      expect(result.themePreference.lightFallback).toBe('light');
+      expect(result.themePreference.darkFallback).toBe('dark');
+    });
   });
 
   describe('round-trip conversion', () => {
     it('preserves settings through round-trip conversion', () => {
       const originalFrontend = {
-        theme: 'light',
+        themePreference: {
+          selected: 'light',
+          lightFallback: 'light',
+          darkFallback: 'dark',
+        },
         fontSize: 20,
         lineHeight: 1.5,
         editorWidth: 900,
@@ -251,7 +309,9 @@ describe('Tauri utilities', () => {
       const roundTrip = toFrontendSettings(backend);
 
       // The round-trip should preserve all values
-      expect(roundTrip.theme).toBe(originalFrontend.theme);
+      expect(roundTrip.themePreference.selected).toBe(originalFrontend.themePreference.selected);
+      expect(roundTrip.themePreference.lightFallback).toBe(originalFrontend.themePreference.lightFallback);
+      expect(roundTrip.themePreference.darkFallback).toBe(originalFrontend.themePreference.darkFallback);
       expect(roundTrip.fontSize).toBe(originalFrontend.fontSize);
       expect(roundTrip.lineHeight).toBe(originalFrontend.lineHeight);
       expect(roundTrip.editorWidth).toBe(originalFrontend.editorWidth);

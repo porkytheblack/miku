@@ -423,7 +423,7 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
               e.currentTarget.style.background = 'transparent';
               e.currentTarget.style.color = 'var(--text-tertiary)';
             }}
-            title="Settings"
+            title="Settings (Cmd+,)"
           >
             <svg
               width="14"

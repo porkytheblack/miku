@@ -1,4 +1,11 @@
-export type Theme = 'light' | 'dark' | 'system';
+// Re-export theme types
+export * from './theme';
+
+// Import ThemePreference for use in EditorSettings (re-exported above)
+import type { ThemePreference } from './theme';
+
+// Legacy theme type (for backward compatibility during migration)
+export type LegacyTheme = 'light' | 'dark' | 'system';
 
 export type HighlightType = 'clarity' | 'grammar' | 'style' | 'structure' | 'economy';
 
@@ -71,7 +78,10 @@ export interface KeyboardSoundProfileInfo {
 }
 
 export interface EditorSettings {
-  theme: Theme;
+  /** @deprecated Use themePreference instead. Kept for backward compatibility migration. */
+  theme?: LegacyTheme;
+  /** New theme preference system */
+  themePreference: ThemePreference;
   fontSize: number;
   lineHeight: number;
   editorWidth: number;
@@ -557,4 +567,48 @@ export interface DocsFolderFetchResult {
   files?: GitHubFolderFile[];
   error?: string;
   rateLimitReset?: Date;
+}
+
+// ============================================
+// Global Search Types
+// ============================================
+
+/**
+ * Categories of searchable primitives in the application
+ */
+export type SearchResultCategory =
+  | 'file'           // Workspace files (markdown, env, kanban, docs)
+  | 'env-variable'   // Environment variables within .miku-env files
+  | 'kanban-card'    // Kanban cards
+  | 'kanban-task'    // Kanban tasks within cards
+  | 'docs-entry';    // Documentation entries
+
+/**
+ * A single search result item
+ */
+export interface SearchResult {
+  id: string;
+  category: SearchResultCategory;
+  title: string;           // Primary display text
+  subtitle?: string;       // Secondary text (e.g., file path, parent card)
+  icon?: SearchResultCategory; // For icon rendering
+  score: number;           // Match score for ranking
+  // Navigation data
+  filePath?: string;       // For file results
+  itemId?: string;         // For in-document items (env var id, card id, etc.)
+  parentId?: string;       // For nested items (task within card)
+  fileIndex?: number;      // For docs folder file index
+}
+
+/**
+ * Filter options for search
+ */
+export type SearchFilter = 'all' | SearchResultCategory;
+
+/**
+ * Props for the GlobalSearch component
+ */
+export interface GlobalSearchProps {
+  isOpen: boolean;
+  onClose: () => void;
 }

@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "solarized-light",
+  "name": "Solarized Light",
+  "description": "Precision colors for machines and people - light variant",
+  "author": {
+    "name": "Ethan Schoonover",
+    "url": "https://ethanschoonover.com/solarized"
+  },
+  "variant": "light",
+  "homepage": "https://ethanschoonover.com/solarized",
+  "colors": {
+    "background": {
+      "primary": "#fdf6e3",
+      "secondary": "#eee8d5",
+      "tertiary": "#e4ddc8"
+    },
+    "text": {
+      "primary": "#002b36",
+      "secondary": "#586e75",
+      "tertiary": "#93a1a1"
+    },
+    "accent": {
+      "primary": "#268bd2",
+      "subtle": "#eee8d5"
+    },
+    "border": {
+      "default": "#e4ddc8",
+      "subtle": "#eee8d5",
+      "focus": "#268bd2"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 43, 54, 0.08)",
+      "md": "0 4px 12px rgba(0, 43, 54, 0.12)",
+      "lg": "0 8px 24px rgba(0, 43, 54, 0.16)"
+    },
+    "highlights": {
+      "clarity": "rgba(181, 137, 0, 0.25)",
+      "grammar": "rgba(220, 50, 47, 0.2)",
+      "style": "rgba(38, 139, 210, 0.2)",
+      "structure": "rgba(108, 113, 196, 0.2)",
+      "economy": "rgba(133, 153, 0, 0.2)"
+    },
+    "syntax": {
+      "heading": "#268bd2",
+      "emphasis": "#586e75",
+      "codeBackground": "#e4ddc8",
+      "codeText": "#cb4b16",
+      "link": "#2aa198",
+      "listMarker": "#93a1a1"
+    }
+  }
+}

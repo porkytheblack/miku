@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Inter } from "next/font/google";
 import "./globals.css";
-import { SettingsProvider } from "@/context/SettingsContext";
-import { MikuProvider } from "@/context/MikuContext";
-import { DocumentProvider } from "@/context/DocumentContext";
-import { WorkspaceProvider } from "@/context/WorkspaceContext";
-import { ToastProvider } from "@/context/ToastContext";
-import { UpdateProvider } from "@/context/UpdateContext";
+import { AppProviders } from "@/context/AppProviders";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -31,19 +26,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${jetbrainsMono.variable} ${inter.variable} antialiased`}>
-        <SettingsProvider>
-          <WorkspaceProvider>
-            <DocumentProvider>
-              <MikuProvider>
-                <ToastProvider position="bottom-right">
-                  <UpdateProvider>
-                    {children}
-                  </UpdateProvider>
-                </ToastProvider>
-              </MikuProvider>
-            </DocumentProvider>
-          </WorkspaceProvider>
-        </SettingsProvider>
+        <AppProviders>
+          {children}
+        </AppProviders>
       </body>
     </html>
   );

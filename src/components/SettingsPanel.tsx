@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { useSettings } from '@/context/SettingsContext';
 import { useMiku } from '@/context/MikuContext';
-import { Theme, AIProvider, AI_MODELS, OPENROUTER_MODELS, LOCAL_LLM_MODELS, AIModelOption, ReviewMode, AggressivenessLevel } from '@/types';
+import { useTheme } from '@/context/ThemeContext';
+import { AIProvider, AI_MODELS, OPENROUTER_MODELS, LOCAL_LLM_MODELS, AIModelOption, ReviewMode, AggressivenessLevel, ThemeListItem } from '@/types';
 import { useKeyboardSounds } from '@/hooks/useKeyboardSounds';
 
 interface SettingsPanelProps {
@@ -265,6 +266,297 @@ function SettingItem({
         {children}
       </SettingRow>
     </div>
+  );
+}
+
+// Theme preview card component
+function ThemeCard({
+  theme,
+  isSelected,
+  onClick,
+}: {
+  theme: ThemeListItem;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full p-3 rounded-lg transition-all text-left"
+      style={{
+        background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-primary)',
+        border: isSelected
+          ? '2px solid var(--accent-primary)'
+          : '1px solid var(--border-subtle)',
+        outline: 'none',
+      }}
+    >
+      {/* Color preview swatches */}
+      <div className="flex gap-1.5 mb-2">
+        <div
+          className="w-6 h-6 rounded"
+          style={{ background: theme.previewColors.background }}
+          title="Background"
+        />
+        <div
+          className="w-6 h-6 rounded"
+          style={{ background: theme.previewColors.text }}
+          title="Text"
+        />
+        <div
+          className="w-6 h-6 rounded"
+          style={{ background: theme.previewColors.accent }}
+          title="Accent"
+        />
+        {/* Variant badge */}
+        <div
+          className="ml-auto px-1.5 py-0.5 rounded text-xs"
+          style={{
+            background: theme.variant === 'dark' ? '#374151' : '#e5e7eb',
+            color: theme.variant === 'dark' ? '#e5e7eb' : '#374151',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '10px',
+          }}
+        >
+          {theme.variant}
+        </div>
+      </div>
+      {/* Theme name */}
+      <div
+        style={{
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '13px',
+          fontWeight: 500,
+        }}
+      >
+        {theme.name}
+      </div>
+      {/* Theme description */}
+      <div
+        style={{
+          color: 'var(--text-tertiary)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '11px',
+          lineHeight: 1.3,
+          marginTop: '2px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {theme.description}
+      </div>
+    </button>
+  );
+}
+
+// Theme picker section component
+function ThemePickerSection() {
+  const { settings, updateSettings } = useSettings();
+  const {
+    groupedThemes,
+    preference,
+    setTheme,
+    updatePreference,
+    isLoading,
+  } = useTheme();
+
+  const handleThemeSelect = (themeId: string) => {
+    setTheme(themeId);
+    // Also update settings for persistence
+    updateSettings({
+      themePreference: {
+        ...settings.themePreference,
+        selected: themeId,
+      },
+    });
+  };
+
+  const handleSystemToggle = () => {
+    const newSelected = preference.selected === 'system' ? 'light' : 'system';
+    setTheme(newSelected);
+    updateSettings({
+      themePreference: {
+        ...settings.themePreference,
+        selected: newSelected,
+      },
+    });
+  };
+
+  const handleFallbackChange = (variant: 'light' | 'dark', themeId: string) => {
+    const newPreference = {
+      ...settings.themePreference,
+      [variant === 'light' ? 'lightFallback' : 'darkFallback']: themeId,
+    };
+    updatePreference(newPreference);
+    updateSettings({ themePreference: newPreference });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <span
+          style={{
+            color: 'var(--text-tertiary)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '13px',
+          }}
+        >
+          Loading themes...
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* System preference toggle */}
+      <SettingSection title="System">
+        <SettingItem
+          label="Follow System"
+          description="Automatically switch between light and dark themes based on your system settings."
+        >
+          <Toggle
+            checked={preference.selected === 'system'}
+            onChange={handleSystemToggle}
+            label="Follow system color scheme"
+          />
+        </SettingItem>
+      </SettingSection>
+
+      {/* System fallback selectors (only when system is selected) */}
+      {preference.selected === 'system' && (
+        <SettingSection title="System Fallbacks">
+          <div className="p-4">
+            <p
+              className="mb-3"
+              style={{
+                color: 'var(--text-tertiary)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: '12px',
+              }}
+            >
+              Choose which themes to use when your system is in light or dark mode.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Light Mode
+                </label>
+                <select
+                  value={settings.themePreference.lightFallback}
+                  onChange={(e) => handleFallbackChange('light', e.target.value)}
+                  className="w-full p-2 rounded-md"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-default)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
+                  }}
+                >
+                  {[...groupedThemes.builtin, ...groupedThemes.presets, ...groupedThemes.custom]
+                    .filter((t) => t.variant === 'light')
+                    .map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Dark Mode
+                </label>
+                <select
+                  value={settings.themePreference.darkFallback}
+                  onChange={(e) => handleFallbackChange('dark', e.target.value)}
+                  className="w-full p-2 rounded-md"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-default)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
+                  }}
+                >
+                  {[...groupedThemes.builtin, ...groupedThemes.presets, ...groupedThemes.custom]
+                    .filter((t) => t.variant === 'dark')
+                    .map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </SettingSection>
+      )}
+
+      {/* Built-in themes */}
+      {groupedThemes.builtin.length > 0 && (
+        <SettingSection title="Built-in">
+          <div className="p-3 grid grid-cols-2 gap-2">
+            {groupedThemes.builtin.map((theme) => (
+              <ThemeCard
+                key={theme.id}
+                theme={theme}
+                isSelected={preference.selected === theme.id}
+                onClick={() => handleThemeSelect(theme.id)}
+              />
+            ))}
+          </div>
+        </SettingSection>
+      )}
+
+      {/* Preset themes */}
+      {groupedThemes.presets.length > 0 && (
+        <SettingSection title="Presets">
+          <div className="p-3 grid grid-cols-2 gap-2">
+            {groupedThemes.presets.map((theme) => (
+              <ThemeCard
+                key={theme.id}
+                theme={theme}
+                isSelected={preference.selected === theme.id}
+                onClick={() => handleThemeSelect(theme.id)}
+              />
+            ))}
+          </div>
+        </SettingSection>
+      )}
+
+      {/* Custom themes */}
+      {groupedThemes.custom.length > 0 && (
+        <SettingSection title="Custom">
+          <div className="p-3 grid grid-cols-2 gap-2">
+            {groupedThemes.custom.map((theme) => (
+              <ThemeCard
+                key={theme.id}
+                theme={theme}
+                isSelected={preference.selected === theme.id}
+                onClick={() => handleThemeSelect(theme.id)}
+              />
+            ))}
+          </div>
+        </SettingSection>
+      )}
+    </>
   );
 }
 
@@ -974,19 +1266,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
       case 'appearance':
         return (
-          <SettingSection title="Theme">
-            <SettingItem
-              label="Color Scheme"
-              description="Choose how the interface appears."
-            >
-              <ButtonGroup
-                options={['light', 'dark', 'system'] as Theme[]}
-                value={settings.theme}
-                onChange={(value) => updateSettings({ theme: value })}
-                getLabel={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
-              />
-            </SettingItem>
-          </SettingSection>
+          <ThemePickerSection />
         );
 
       case 'typography':

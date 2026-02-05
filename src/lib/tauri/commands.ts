@@ -8,6 +8,9 @@ import { invoke } from '@tauri-apps/api/core';
 /**
  * Keyboard sound settings (snake_case for Rust backend)
  */
+/**
+ * Keyboard sound settings (snake_case for Rust backend)
+ */
 export interface KeyboardSoundSettingsBackend {
   enabled: boolean;
   profile_id: string;
@@ -16,8 +19,19 @@ export interface KeyboardSoundSettingsBackend {
   pitch_variation: number;
 }
 
-export interface EditorSettings {
-  theme: string;
+/**
+ * Theme preference (snake_case for Rust backend)
+ */
+export interface ThemePreferenceBackend {
+  selected: string;
+  light_fallback: string;
+  dark_fallback: string;
+}
+
+export interface EditorSettingsBackend {
+  /** @deprecated Use theme_preference instead */
+  theme?: string | null;
+  theme_preference: ThemePreferenceBackend;
   font_size: number;
   line_height: number;
   editor_width: number;
@@ -50,14 +64,14 @@ export interface WorkspaceFile {
 /**
  * Load settings from the app data directory
  */
-export async function loadSettings(): Promise<EditorSettings> {
-  return invoke<EditorSettings>('load_settings');
+export async function loadSettings(): Promise<EditorSettingsBackend> {
+  return invoke<EditorSettingsBackend>('load_settings');
 }
 
 /**
  * Save settings to the app data directory
  */
-export async function saveSettings(settings: EditorSettings): Promise<void> {
+export async function saveSettings(settings: EditorSettingsBackend): Promise<void> {
   return invoke('save_settings', { settings });
 }
 
@@ -107,7 +121,11 @@ export async function getAppVersion(): Promise<string> {
  * Convert frontend settings to backend format
  */
 export function toBackendSettings(settings: {
-  theme: string;
+  themePreference: {
+    selected: string;
+    lightFallback: string;
+    darkFallback: string;
+  };
   fontSize: number;
   lineHeight: number;
   editorWidth: number;
@@ -123,9 +141,15 @@ export function toBackendSettings(settings: {
     playKeyupSounds: boolean;
     pitchVariation: number;
   };
-}): EditorSettings {
+}): EditorSettingsBackend {
   return {
-    theme: settings.theme,
+    // theme is deprecated, set to null for new settings
+    theme: null,
+    theme_preference: {
+      selected: settings.themePreference.selected,
+      light_fallback: settings.themePreference.lightFallback,
+      dark_fallback: settings.themePreference.darkFallback,
+    },
     font_size: settings.fontSize,
     line_height: settings.lineHeight,
     editor_width: settings.editorWidth,
@@ -147,8 +171,13 @@ export function toBackendSettings(settings: {
 /**
  * Convert backend settings to frontend format
  */
-export function toFrontendSettings(settings: EditorSettings): {
-  theme: 'light' | 'dark' | 'system';
+export function toFrontendSettings(settings: EditorSettingsBackend): {
+  theme?: 'light' | 'dark' | 'system';
+  themePreference: {
+    selected: string;
+    lightFallback: string;
+    darkFallback: string;
+  };
   fontSize: number;
   lineHeight: number;
   editorWidth: number;
@@ -159,7 +188,7 @@ export function toFrontendSettings(settings: EditorSettings): {
   soundEnabled: boolean;
   keyboardSounds: {
     enabled: boolean;
-    profileId: 'cherry-mx-blue' | 'cherry-mx-brown' | 'topre';
+    profileId: string;
     volume: number;
     playKeyupSounds: boolean;
     pitchVariation: number;
@@ -175,8 +204,31 @@ export function toFrontendSettings(settings: EditorSettings): {
   };
   const keyboardSounds = settings.keyboard_sounds ?? keyboardSoundsDefaults;
 
+  // Provide defaults for theme preference with migration from legacy theme
+  const themePreferenceDefaults = {
+    selected: 'system',
+    light_fallback: 'light',
+    dark_fallback: 'dark',
+  };
+
+  // Migrate legacy theme to theme_preference if needed
+  let themePreference = settings.theme_preference ?? themePreferenceDefaults;
+  if (!settings.theme_preference && settings.theme) {
+    themePreference = {
+      selected: settings.theme === 'system' ? 'system' : settings.theme,
+      light_fallback: 'light',
+      dark_fallback: 'dark',
+    };
+  }
+
   return {
-    theme: settings.theme as 'light' | 'dark' | 'system',
+    // Include legacy theme for migration purposes
+    theme: settings.theme as 'light' | 'dark' | 'system' | undefined,
+    themePreference: {
+      selected: themePreference.selected,
+      lightFallback: themePreference.light_fallback,
+      darkFallback: themePreference.dark_fallback,
+    },
     fontSize: settings.font_size,
     lineHeight: settings.line_height,
     editorWidth: settings.editor_width,
@@ -187,7 +239,7 @@ export function toFrontendSettings(settings: EditorSettings): {
     soundEnabled: settings.sound_enabled ?? true,
     keyboardSounds: {
       enabled: keyboardSounds.enabled,
-      profileId: keyboardSounds.profile_id as 'cherry-mx-blue' | 'cherry-mx-brown' | 'topre',
+      profileId: keyboardSounds.profile_id,
       volume: keyboardSounds.volume,
       playKeyupSounds: keyboardSounds.play_keyup_sounds,
       pitchVariation: keyboardSounds.pitch_variation,

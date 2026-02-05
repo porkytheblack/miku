@@ -41,6 +41,42 @@ pub struct KeyboardSoundSettings {
     pub pitch_variation: f32,
 }
 
+/// Theme preference for the new theming system
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ThemePreference {
+    /// Selected theme ID or "system" for auto-detection
+    #[serde(default = "default_theme_selected")]
+    pub selected: String,
+    /// Theme to use when system is in light mode
+    #[serde(default = "default_light_fallback")]
+    pub light_fallback: String,
+    /// Theme to use when system is in dark mode
+    #[serde(default = "default_dark_fallback")]
+    pub dark_fallback: String,
+}
+
+fn default_theme_selected() -> String {
+    "system".to_string()
+}
+
+fn default_light_fallback() -> String {
+    "light".to_string()
+}
+
+fn default_dark_fallback() -> String {
+    "dark".to_string()
+}
+
+impl Default for ThemePreference {
+    fn default() -> Self {
+        Self {
+            selected: default_theme_selected(),
+            light_fallback: default_light_fallback(),
+            dark_fallback: default_dark_fallback(),
+        }
+    }
+}
+
 fn default_profile_id() -> String {
     "cherry-mx-blue".to_string()
 }
@@ -67,7 +103,12 @@ impl Default for KeyboardSoundSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EditorSettings {
-    pub theme: String,
+    /// @deprecated Use theme_preference instead. Kept for backward compatibility.
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// New theme preference system
+    #[serde(default)]
+    pub theme_preference: ThemePreference,
     pub font_size: u32,
     pub line_height: f32,
     pub editor_width: u32,
@@ -88,7 +129,8 @@ fn default_sound_enabled() -> bool {
 impl Default for EditorSettings {
     fn default() -> Self {
         Self {
-            theme: "system".to_string(),
+            theme: None, // Deprecated, use theme_preference
+            theme_preference: ThemePreference::default(),
             font_size: 16,
             line_height: 1.6,
             editor_width: 720,
@@ -224,7 +266,10 @@ mod tests {
     #[test]
     fn test_default_settings() {
         let settings = EditorSettings::default();
-        assert_eq!(settings.theme, "system");
+        assert!(settings.theme.is_none()); // Deprecated field
+        assert_eq!(settings.theme_preference.selected, "system");
+        assert_eq!(settings.theme_preference.light_fallback, "light");
+        assert_eq!(settings.theme_preference.dark_fallback, "dark");
         assert_eq!(settings.font_size, 16);
         assert_eq!(settings.line_height, 1.6);
         assert_eq!(settings.editor_width, 720);
@@ -270,7 +315,7 @@ mod tests {
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: EditorSettings = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(settings.theme, deserialized.theme);
+        assert_eq!(settings.theme_preference.selected, deserialized.theme_preference.selected);
         assert_eq!(settings.font_size, deserialized.font_size);
         assert_eq!(settings.line_height, deserialized.line_height);
     }

@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "solarized-dark",
+  "name": "Solarized Dark",
+  "description": "Precision colors for machines and people - dark variant",
+  "author": {
+    "name": "Ethan Schoonover",
+    "url": "https://ethanschoonover.com/solarized/"
+  },
+  "variant": "dark",
+  "homepage": "https://ethanschoonover.com/solarized/",
+  "colors": {
+    "background": {
+      "primary": "#002b36",
+      "secondary": "#073642",
+      "tertiary": "#586e75"
+    },
+    "text": {
+      "primary": "#fdf6e3",
+      "secondary": "#eee8d5",
+      "tertiary": "#93a1a1"
+    },
+    "accent": {
+      "primary": "#268bd2",
+      "subtle": "#073642"
+    },
+    "border": {
+      "default": "#586e75",
+      "subtle": "#073642",
+      "focus": "#268bd2"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 0, 0, 0.35)",
+      "md": "0 4px 12px rgba(0, 0, 0, 0.45)",
+      "lg": "0 8px 24px rgba(0, 0, 0, 0.55)"
+    },
+    "highlights": {
+      "clarity": "rgba(181, 137, 0, 0.3)",
+      "grammar": "rgba(220, 50, 47, 0.3)",
+      "style": "rgba(38, 139, 210, 0.3)",
+      "structure": "rgba(108, 113, 196, 0.3)",
+      "economy": "rgba(133, 153, 0, 0.3)"
+    },
+    "syntax": {
+      "heading": "#268bd2",
+      "emphasis": "#eee8d5",
+      "codeBackground": "#073642",
+      "codeText": "#dc322f",
+      "link": "#2aa198",
+      "listMarker": "#93a1a1"
+    }
+  }
+}

@@ -212,7 +212,7 @@ export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser 
             onClick={() => setShowSettings(true)}
             className="p-1 rounded transition-colors hover:bg-[var(--bg-tertiary)]"
             aria-label="Open settings"
-            title="Settings"
+            title="Settings (Cmd+,)"
           >
             <svg
               width="16"

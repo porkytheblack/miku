@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "dracula",
+  "name": "Dracula",
+  "description": "A dark theme for vampires and developers",
+  "author": {
+    "name": "Dracula Theme",
+    "url": "https://draculatheme.com"
+  },
+  "variant": "dark",
+  "homepage": "https://draculatheme.com",
+  "colors": {
+    "background": {
+      "primary": "#282a36",
+      "secondary": "#343746",
+      "tertiary": "#44475a"
+    },
+    "text": {
+      "primary": "#f8f8f2",
+      "secondary": "#e9e9e0",
+      "tertiary": "#6272a4"
+    },
+    "accent": {
+      "primary": "#bd93f9",
+      "subtle": "#343746"
+    },
+    "border": {
+      "default": "#44475a",
+      "subtle": "#343746",
+      "focus": "#bd93f9"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "md": "0 4px 12px rgba(0, 0, 0, 0.4)",
+      "lg": "0 8px 24px rgba(0, 0, 0, 0.5)"
+    },
+    "highlights": {
+      "clarity": "rgba(241, 250, 140, 0.3)",
+      "grammar": "rgba(255, 85, 85, 0.3)",
+      "style": "rgba(139, 233, 253, 0.3)",
+      "structure": "rgba(189, 147, 249, 0.3)",
+      "economy": "rgba(80, 250, 123, 0.3)"
+    },
+    "syntax": {
+      "heading": "#bd93f9",
+      "emphasis": "#e9e9e0",
+      "codeBackground": "#44475a",
+      "codeText": "#ff79c6",
+      "link": "#8be9fd",
+      "listMarker": "#6272a4"
+    }
+  }
+}
