@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "Simple Agent",
+  "description": "Minimal ACP agent - just point at a folder and go",
+  "provider": {
+    "type": "anthropic",
+    "model": "claude-sonnet-4-5-20250514",
+    "apiKeyEnv": "ANTHROPIC_API_KEY"
+  },
+  "permissions": {
+    "allowFileRead": true,
+    "allowFileWrite": true,
+    "allowTerminal": false
+  }
+}

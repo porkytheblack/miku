@@ -17,9 +17,12 @@
     "version:check": "node scripts/version.js check",
     "version:bump:patch": "node scripts/version.js bump patch",
     "version:bump:minor": "node scripts/version.js bump minor",
-    "version:bump:major": "node scripts/version.js bump major"
+    "version:bump:major": "node scripts/version.js bump major",
+    "acp": "npx tsx src/lib/acp/cli.ts",
+    "acp:init": "npx tsx -e \"const {createDefaultMikuFile,serializeMikuFile}=require('./src/lib/mikuFileParser');const fs=require('fs');const name=process.argv[2]||'My Agent';fs.writeFileSync('miku.json',serializeMikuFile(createDefaultMikuFile(name)));console.log('Created miku.json')\""
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.16.1",
     "@anthropic-ai/sdk": "^0.71.2",
     "@blocksuite/blocks": "^0.19.5",
     "@blocksuite/presets": "^0.19.5",

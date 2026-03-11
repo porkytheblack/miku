@@ -8,6 +8,7 @@ import BlockEditor from './BlockEditor';
 import EnvEditor from './EnvEditor';
 import KanbanEditor from './KanbanEditor';
 import DocsEditor from './DocsEditor';
+import MikuConfigEditor from './MikuConfigEditor';
 
 /**
  * EditorSwitcher component
@@ -15,6 +16,7 @@ import DocsEditor from './DocsEditor';
  * - .miku-env files -> EnvEditor (no AI, secure)
  * - .kanban files -> KanbanEditor (kanban board)
  * - .docs files -> DocsEditor (documentation viewer)
+ * - .miku files -> MikuConfigEditor (ACP agent config)
  * - .md files -> BlockEditor (with AI suggestions)
  *
  * IMPORTANT: Uses key prop to force React to completely remount the editor
@@ -74,6 +76,16 @@ export default function EditorSwitcher() {
   if (fileType === 'docs') {
     return (
       <DocsEditor
+        key={editorKey}
+        initialContent={activeDocument?.content}
+        onContentChange={handleContentChange}
+      />
+    );
+  }
+
+  if (fileType === 'miku-config') {
+    return (
+      <MikuConfigEditor
         key={editorKey}
         initialContent={activeDocument?.content}
         onContentChange={handleContentChange}
