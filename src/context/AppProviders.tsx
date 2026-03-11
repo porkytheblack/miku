@@ -8,6 +8,7 @@ import { DocumentProvider } from './DocumentContext';
 import { WorkspaceProvider } from './WorkspaceContext';
 import { ToastProvider } from './ToastContext';
 import { UpdateProvider } from './UpdateContext';
+import { AIConfigProvider } from './AIConfigContext';
 import { ThemePreference } from '@/types/theme';
 
 /**
@@ -51,17 +52,19 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <SettingsProvider>
       <ThemeSettingsConnector>
-        <WorkspaceProvider>
-          <DocumentProvider>
-            <MikuProvider>
-              <ToastProvider position="bottom-right">
-                <UpdateProvider>
-                  {children}
-                </UpdateProvider>
-              </ToastProvider>
-            </MikuProvider>
-          </DocumentProvider>
-        </WorkspaceProvider>
+        <AIConfigProvider>
+          <WorkspaceProvider>
+            <DocumentProvider>
+              <MikuProvider>
+                <ToastProvider position="bottom-right">
+                  <UpdateProvider>
+                    {children}
+                  </UpdateProvider>
+                </ToastProvider>
+              </MikuProvider>
+            </DocumentProvider>
+          </WorkspaceProvider>
+        </AIConfigProvider>
       </ThemeSettingsConnector>
     </SettingsProvider>
   );
