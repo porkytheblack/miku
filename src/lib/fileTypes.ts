@@ -29,6 +29,7 @@ const NAMED_EXTENSIONS: { suffix: string; type: FileType }[] = [
   { suffix: '.miku-docs', type: 'docs' },
   { suffix: '.miku.json', type: 'miku-config' },
   { suffix: '.miku', type: 'miku-config' },
+  { suffix: '.miku-chat', type: 'agent-chat' },
 ];
 
 /**
@@ -76,6 +77,10 @@ export function getFileTypeFromContent(content: string): FileType {
     try {
       const parsed = JSON.parse(trimmed);
       if (parsed && typeof parsed === 'object' && parsed.version) {
+        // Check for agent chat format (has messages array and agentConfig)
+        if (Array.isArray(parsed.messages) && parsed.agentConfig) {
+          return 'agent-chat';
+        }
         // Check for miku config format (has provider and name)
         if (parsed.provider && typeof parsed.name === 'string') {
           return 'miku-config';
@@ -141,6 +146,8 @@ export function getExtensionForType(type: FileType): string {
       return '.docs';
     case 'miku-config':
       return '.miku';
+    case 'agent-chat':
+      return '.miku-chat';
     case 'markdown':
     default:
       return '.md';
@@ -160,6 +167,8 @@ export function getFileTypeDisplayName(type: FileType): string {
       return 'Documentation';
     case 'miku-config':
       return 'Miku Agent Config';
+    case 'agent-chat':
+      return 'Agent Chat';
     case 'markdown':
     default:
       return 'Markdown';

@@ -286,7 +286,7 @@ export interface MikuEnvDocument {
 /**
  * File type detection for the editor
  */
-export type FileType = 'markdown' | 'miku-env' | 'kanban' | 'docs' | 'miku-config';
+export type FileType = 'markdown' | 'miku-env' | 'kanban' | 'docs' | 'miku-config' | 'agent-chat';
 
 /**
  * Export format options for env files

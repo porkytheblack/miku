@@ -9,6 +9,7 @@ import EnvEditor from './EnvEditor';
 import KanbanEditor from './KanbanEditor';
 import DocsEditor from './DocsEditor';
 import MikuConfigEditor from './MikuConfigEditor';
+import AgentChatEditor from './AgentChatEditor';
 
 /**
  * EditorSwitcher component
@@ -86,6 +87,16 @@ export default function EditorSwitcher() {
   if (fileType === 'miku-config') {
     return (
       <MikuConfigEditor
+        key={editorKey}
+        initialContent={activeDocument?.content}
+        onContentChange={handleContentChange}
+      />
+    );
+  }
+
+  if (fileType === 'agent-chat') {
+    return (
+      <AgentChatEditor
         key={editorKey}
         initialContent={activeDocument?.content}
         onContentChange={handleContentChange}

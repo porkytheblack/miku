@@ -26,6 +26,7 @@ interface CommandPaletteProps {
   onRequestKanbanFileName?: () => void;
   onRequestDocsFileName?: () => void;
   onToggleGlobalSearch?: () => void;
+  onRequestAgentChatFileName?: () => void;
 }
 
 const categoryLabels: Record<Command['category'], string> = {
@@ -97,6 +98,7 @@ export default function CommandPalette({
   onRequestKanbanFileName,
   onRequestDocsFileName,
   onToggleGlobalSearch,
+  onRequestAgentChatFileName,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -204,6 +206,22 @@ export default function CommandPalette({
             <line x1="8" y1="7" x2="16" y2="7" />
             <line x1="8" y1="11" x2="16" y2="11" />
             <line x1="8" y1="15" x2="12" y2="15" />
+          </svg>
+        ),
+      },
+      {
+        id: 'ai.agentChat',
+        label: 'New Agent Chat',
+        category: 'ai',
+        action: () => {
+          if (workspace.currentWorkspace && onRequestAgentChatFileName) {
+            onRequestAgentChatFileName();
+          }
+        },
+        keywords: ['agent', 'chat', 'acp', 'conversation', 'talk', 'ai', 'miku'],
+        icon: (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         ),
       },
@@ -431,6 +449,7 @@ export default function CommandPalette({
     onToggleHelp,
     onToggleGlobalSearch,
     onRequestEnvFileName,
+    onRequestAgentChatFileName,
     workspace,
   ]);
 
