@@ -250,6 +250,9 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
     relay.setHandlers({
       onAgentEvent: (update: AcpSessionUpdate) => {
+        // Mark as running when we start receiving streaming events
+        setIsRunning(true);
+
         // Process session updates the same way as local AcpClient
         switch (update.type) {
           case 'agent_message_chunk':
@@ -293,8 +296,20 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         }
       },
       onAgentStatus: (status, connectionStatus) => {
-        setIsRunning(status === 'thinking' || status === 'working');
+        const wasRunning = status === 'thinking' || status === 'working';
+        setIsRunning(wasRunning);
         setIsConnected(connectionStatus === 'connected');
+
+        // When agent transitions to idle, clear streaming state
+        // (the host will send the authoritative session state separately)
+        if (!wasRunning) {
+          setStreamingContent('');
+          setStreamingThought('');
+          setActiveToolCalls(new Map());
+          streamContentRef.current = '';
+          streamThoughtRef.current = '';
+          streamToolCallsRef.current = new Map();
+        }
       },
       onSessionState: (conversation) => {
         // Populate full chat history from host
@@ -346,6 +361,51 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
       },
     });
   }, [isRemoteHost, getAgentRelayHost, isConnected]);
+
+  // Remote host: send full session state when a new peer connects
+  useEffect(() => {
+    if (!isRemoteHost || remoteState.peerConnectGeneration === 0) return;
+    const relay = getAgentRelayHost();
+    if (!relay) return;
+
+    // Convert local messages to AgentMessage format and send
+    const agentMessages = messages.map(m => ({
+      id: m.id,
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    const agentTasks = tasks.map((t, i) => ({
+      id: `task-${i}`,
+      content: t.content,
+      activeForm: t.activeForm,
+      status: t.status as import('@/types/agent').AgentTaskStatus,
+      createdAt: new Date().toISOString(),
+    }));
+    relay.sendSessionState(agentMessages, agentTasks);
+
+    // Also send current status
+    const activityStatus = isRunning ? 'working' : 'idle';
+    const connStatus = isConnected ? 'connected' : 'disconnected';
+    relay.relayStatus(
+      activityStatus as import('@/types/agent').AgentActivityStatus,
+      connStatus as import('@/types/agent').AgentConnectionStatus,
+    );
+  }, [isRemoteHost, remoteState.peerConnectGeneration]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Remote host: relay status changes to connected remotes
+  useEffect(() => {
+    if (!isRemoteHost) return;
+    const relay = getAgentRelayHost();
+    if (!relay || remoteState.connectedPeers.length === 0) return;
+
+    const activityStatus = isRunning ? 'working' : 'idle';
+    const connStatus = isConnected ? 'connected' : 'disconnected';
+    relay.relayStatus(
+      activityStatus as import('@/types/agent').AgentActivityStatus,
+      connStatus as import('@/types/agent').AgentConnectionStatus,
+    );
+  }, [isRemoteHost, isRunning, isConnected, getAgentRelayHost, remoteState.connectedPeers.length]);
 
   // Send prompt
   const handleSend = useCallback(async () => {
@@ -425,6 +485,27 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
       setMessages(finalMessages);
       queueMicrotask(() => persistDoc(finalMessages));
+
+      // Send final session state to remote guests so they have the authoritative conversation
+      if (isRemoteHost) {
+        const relay = getAgentRelayHost();
+        if (relay && remoteState.connectedPeers.length > 0) {
+          const agentMsgs = finalMessages.map(m => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content,
+            timestamp: m.timestamp,
+          }));
+          const agentTasks = tasks.map((t, i) => ({
+            id: `task-${i}`,
+            content: t.content,
+            activeForm: t.activeForm,
+            status: t.status as import('@/types/agent').AgentTaskStatus,
+            createdAt: new Date().toISOString(),
+          }));
+          relay.sendSessionState(agentMsgs, agentTasks);
+        }
+      }
     } catch (err) {
       if ((err as Error).message !== 'cancelled') {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -436,7 +517,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
       setStreamingThought('');
       setActiveToolCalls(new Map());
     }
-  }, [input, isRunning, messages, persistDoc, permissionMode, selectedModel]);
+  }, [input, isRunning, messages, persistDoc, permissionMode, selectedModel, isRemoteHost, getAgentRelayHost, remoteState.connectedPeers.length, tasks]);
 
   const handleCancel = useCallback(async () => {
     await clientRef.current?.cancel();

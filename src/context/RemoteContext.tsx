@@ -52,6 +52,8 @@ interface RemoteState {
   agentConnectionStatus: AgentConnectionStatus | null;
   /** Path to an agent chat file that should be auto-opened (set when session state arrives) */
   pendingAgentChatPath: string | null;
+  /** Increments each time a new peer connects (host side) — used by AgentChatEditor to trigger session state send */
+  peerConnectGeneration: number;
   error?: string;
 }
 
@@ -95,6 +97,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
     agentStatus: null,
     agentConnectionStatus: null,
     pendingAgentChatPath: null,
+    peerConnectGeneration: 0,
   });
 
   const peerRef = useRef<MikuPeer | null>(null);
@@ -168,6 +171,8 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
           setRemote(prev => ({
             ...prev,
             connectedPeers: [...prev.connectedPeers, peerInfo],
+            // Increment generation so host AgentChatEditor can react to new peers
+            peerConnectGeneration: prev.peerConnectGeneration + 1,
           }));
 
           // Start file sync when a peer connects
@@ -221,6 +226,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
         agentStatus: null,
         agentConnectionStatus: null,
         pendingAgentChatPath: null,
+        peerConnectGeneration: 0,
       });
 
       try {
@@ -283,6 +289,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
         agentStatus: null,
         agentConnectionStatus: null,
         pendingAgentChatPath: null,
+        peerConnectGeneration: 0,
       });
 
       try {
@@ -323,6 +330,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
       agentStatus: null,
       agentConnectionStatus: null,
       pendingAgentChatPath: null,
+      peerConnectGeneration: 0,
     });
 
     try {
