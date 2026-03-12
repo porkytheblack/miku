@@ -119,8 +119,22 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
       // Workspace manager is created with a placeholder peerId.
       // The actual peerId is set after the peer connects (see startSharing/joinRoom).
       const wsManager = new RemoteWorkspaceManager(peer, workspacePath, 'pending');
+      // Track whether we've already auto-opened a chat file (once per session)
+      let chatAutoOpened = false;
       wsManager.setHandlers({
         onRefreshFiles: refreshFiles,
+        onFileUpdated: (relativePath) => {
+          // On guest: auto-open the first synced .miku-chat file from the host
+          if (role === 'guest' && !chatAutoOpened && relativePath.endsWith('.miku-chat')) {
+            chatAutoOpened = true;
+            const fullPath = `${workspacePath}/${relativePath}`;
+            setRemote(prev => {
+              // Only set if no pending chat already
+              if (prev.pendingAgentChatPath) return prev;
+              return { ...prev, pendingAgentChatPath: fullPath };
+            });
+          }
+        },
         onSyncStatusChange: (syncStatus) => {
           setRemote(prev => ({ ...prev, syncStatus }));
         },
@@ -144,20 +158,9 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
             }));
           },
           onSessionState: async (_conversation, _tasks) => {
-            // Auto-create a .miku-chat file in the remote workspace and signal it should be opened
-            if (!workspacePath) return;
-            try {
-              const chatFileName = 'remote-agent.miku-chat';
-              const chatPath = `${workspacePath}/${chatFileName}`;
-              if (isTauri()) {
-                const { invoke } = await import('@tauri-apps/api/core');
-                // Create the file (save_file creates or overwrites)
-                await invoke('save_file', { path: chatPath, content: '' });
-              }
-              setRemote(prev => ({ ...prev, pendingAgentChatPath: chatPath }));
-            } catch (err) {
-              console.error('Failed to auto-create agent chat file:', err);
-            }
+            // Just update connection status — the guest auto-opens synced .miku-chat files
+            // via the onFileUpdated handler in RemoteWorkspaceManager
+            setRemote(prev => ({ ...prev, agentConnectionStatus: 'connected' }));
           },
         });
         agentRelayRemoteRef.current = relay;
