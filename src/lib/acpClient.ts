@@ -53,6 +53,8 @@ export interface AcpPermissionRequest {
   options: acp.PermissionOption[];
 }
 
+const CONNECT_TIMEOUT_MS = 15_000;
+
 // ============================================
 // ACP Client
 // ============================================
@@ -62,11 +64,13 @@ export class AcpClient {
   private sessionId: string | null = null;
   private childProcess: { write: (data: string | Uint8Array) => Promise<void>; kill: () => Promise<void> } | null = null;
   private isConnected = false;
+  private stderrBuffer: string[] = [];
 
   // Callbacks for UI
   onSessionUpdate: ((update: AcpSessionUpdate) => void) | null = null;
   onPermissionRequest: ((req: AcpPermissionRequest) => Promise<{ optionId: string } | 'cancelled'>) | null = null;
   onError: ((error: string) => void) | null = null;
+  onStderr: ((text: string) => void) | null = null;
   onDisconnect: (() => void) | null = null;
 
   // Session state
@@ -86,6 +90,11 @@ export class AcpClient {
 
     // Dynamically import Tauri shell plugin
     const { Command } = await import('@tauri-apps/plugin-shell');
+
+    // Track whether the process exited before we finished connecting
+    let earlyExitCode: number | null = null;
+    let earlyExitError: string | null = null;
+    let earlyExitReject: ((err: Error) => void) | null = null;
 
     // Spawn claude with ACP mode
     const command = Command.create('claude', ['--ide'], {
@@ -107,26 +116,52 @@ export class AcpClient {
       readableController.enqueue(data);
     });
 
+    // Collect stderr and forward to UI
     command.stderr.on('data', (data: Uint8Array) => {
-      // Log stderr for debugging
       const text = new TextDecoder().decode(data);
       console.error('[claude stderr]', text);
+      this.stderrBuffer.push(text);
+      this.onStderr?.(text);
     });
 
-    command.on('close', () => {
+    command.on('close', (data) => {
       try { readableController.close(); } catch { /* already closed */ }
-      this.isConnected = false;
-      this.onDisconnect?.();
+
+      if (!this.isConnected) {
+        // Process exited during connection setup
+        earlyExitCode = data.code;
+        const stderr = this.stderrBuffer.join('').trim();
+        earlyExitError = stderr
+          ? `Claude Code exited (code ${data.code}): ${stderr}`
+          : `Claude Code exited with code ${data.code}. Is Claude Code installed and logged in?`;
+        earlyExitReject?.(new Error(earlyExitError));
+      } else {
+        this.isConnected = false;
+        this.onDisconnect?.();
+      }
     });
 
     command.on('error', (error: string) => {
       console.error('[claude error]', error);
-      this.onError?.(error);
+      if (!this.isConnected) {
+        earlyExitError = `Failed to spawn Claude Code: ${error}`;
+        earlyExitReject?.(new Error(earlyExitError));
+      } else {
+        this.onError?.(error);
+      }
       try { readableController.close(); } catch { /* already closed */ }
     });
 
     // Spawn the process
-    const child = await command.spawn();
+    let child;
+    try {
+      child = await command.spawn();
+    } catch (err) {
+      const stderr = this.stderrBuffer.join('').trim();
+      throw new Error(
+        `Could not start Claude Code. Is it installed?\n${stderr || (err instanceof Error ? err.message : String(err))}`
+      );
+    }
     this.childProcess = child;
 
     // Create writable stream that writes to stdin
@@ -151,30 +186,49 @@ export class AcpClient {
       this.onDisconnect?.();
     });
 
-    // Initialize the connection
-    const initResult = await this.connection.initialize({
-      protocolVersion: acp.PROTOCOL_VERSION,
-      clientInfo: {
-        name: 'Miku',
-        version: '0.0.9',
+    // Initialize with timeout + early-exit detection
+    const initResult = await this.withTimeout(
+      (reject) => {
+        earlyExitReject = reject;
+        return this.connection!.initialize({
+          protocolVersion: acp.PROTOCOL_VERSION,
+          clientInfo: {
+            name: 'Miku',
+            version: '0.0.9',
+          },
+          clientCapabilities: {
+            fs: {
+              readTextFile: true,
+              writeTextFile: true,
+            },
+            terminal: true,
+          },
+        });
       },
-      clientCapabilities: {
-        fs: {
-          readTextFile: true,
-          writeTextFile: true,
-        },
-        terminal: true,
-      },
-    });
+      CONNECT_TIMEOUT_MS,
+      'Claude Code did not respond to initialization. Check that `claude` is installed and supports --ide.',
+    );
+
+    // Check if process died during init
+    if (earlyExitCode !== null) {
+      throw new Error(earlyExitError ?? 'Claude Code exited unexpectedly');
+    }
 
     this.agentInfo = initResult.agentInfo ?? null;
     this.isConnected = true;
 
-    // Create a session
-    const sessionResult = await this.connection.newSession({
-      cwd,
-      mcpServers: [],
-    });
+    // Create a session (also with timeout)
+    const sessionResult = await this.withTimeout(
+      (reject) => {
+        earlyExitReject = reject;
+        return this.connection!.newSession({
+          cwd,
+          mcpServers: [],
+        });
+      },
+      CONNECT_TIMEOUT_MS,
+      'Claude Code did not respond to session creation.',
+    );
 
     this.sessionId = sessionResult.sessionId;
 
@@ -183,6 +237,8 @@ export class AcpClient {
       this.availableModes = sessionResult.modes.availableModes ?? [];
       this.currentModeId = sessionResult.modes.currentModeId ?? null;
     }
+
+    earlyExitReject = null;
   }
 
   /**
@@ -246,6 +302,44 @@ export class AcpClient {
 
   get session(): string | null {
     return this.sessionId;
+  }
+
+  get stderr(): string {
+    return this.stderrBuffer.join('');
+  }
+
+  // ============================================
+  // Helpers
+  // ============================================
+
+  /**
+   * Race a promise against a timeout and an optional early-reject callback.
+   * The `fn` receives a `reject` function that can be called externally
+   * (e.g. from the close handler) to abort early.
+   */
+  private withTimeout<T>(
+    fn: (reject: (err: Error) => void) => Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const stderr = this.stderrBuffer.join('').trim();
+        reject(new Error(
+          stderr ? `${timeoutMessage}\n\nstderr: ${stderr}` : timeoutMessage
+        ));
+      }, timeoutMs);
+
+      fn(reject)
+        .then((result) => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+    });
   }
 
   // ============================================

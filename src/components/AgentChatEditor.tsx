@@ -45,6 +45,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [activeToolCalls, setActiveToolCalls] = useState<Map<string, AcpToolCallInfo>>(new Map());
   const [pendingPermission, setPendingPermission] = useState<AcpPermissionRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stderrLog, setStderrLog] = useState('');
   const [agentName, setAgentName] = useState(doc.agentConfig.agentName || 'Claude Code');
   const [availableModes, setAvailableModes] = useState<Array<{ id: string; name: string }>>([]);
   const [currentMode, setCurrentMode] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
     setIsConnecting(true);
     setError(null);
+    setStderrLog('');
 
     try {
       const client = new AcpClient();
@@ -151,6 +153,11 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         setError(errMsg);
       };
 
+      // Stderr handler (surface process output for debugging)
+      client.onStderr = (text: string) => {
+        setStderrLog(prev => prev + text);
+      };
+
       // Disconnect handler
       client.onDisconnect = () => {
         setIsConnected(false);
@@ -178,15 +185,12 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     }
   }, [inTauri, doc.agentConfig.cwd, workspace.currentWorkspace?.path]);
 
-  // Auto-connect on mount
+  // Cleanup on unmount
   useEffect(() => {
-    if (inTauri && !isConnected && !isConnecting) {
-      handleConnect();
-    }
     return () => {
       clientRef.current?.disconnect();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Send prompt
   const handleSend = useCallback(async () => {
@@ -384,7 +388,56 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         flex: 1, overflowY: 'auto', padding: '16px 20px',
         display: 'flex', flexDirection: 'column', gap: '2px',
       }}>
-        {/* Empty state */}
+        {/* Not connected - show connect prompt */}
+        {messages.length === 0 && !isConnected && !isConnecting && (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: '16px', color: 'var(--text-tertiary)',
+            padding: '40px',
+          }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={0.4}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <p style={{ fontSize: '16px', fontWeight: 500 }}>Claude Code Agent</p>
+            <p style={{ fontSize: '13px', textAlign: 'center', maxWidth: '360px' }}>
+              Connect to Claude Code running on your device. Uses your existing Claude Code login - no separate authentication needed.
+            </p>
+            <button onClick={handleConnect} style={{
+              padding: '10px 24px', fontSize: '14px', fontWeight: 500,
+              background: 'var(--text-accent)', border: 'none', borderRadius: '8px',
+              color: 'white', cursor: 'pointer',
+            }}>
+              Connect to Claude Code
+            </button>
+            {error && (
+              <div style={{
+                marginTop: '8px', padding: '10px 14px', maxWidth: '480px',
+                background: 'rgba(231, 76, 60, 0.08)', border: '1px solid rgba(231, 76, 60, 0.2)',
+                borderRadius: '8px', color: '#e74c3c', fontSize: '13px',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {error}
+              </div>
+            )}
+            {stderrLog && (
+              <details style={{ marginTop: '4px', maxWidth: '480px', width: '100%' }}>
+                <summary style={{ fontSize: '12px', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+                  Process output
+                </summary>
+                <pre style={{
+                  margin: '6px 0 0', padding: '8px', background: 'var(--bg-tertiary)',
+                  borderRadius: '6px', fontSize: '11px', lineHeight: '1.4',
+                  overflow: 'auto', maxHeight: '200px',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {stderrLog}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* Connected empty state */}
         {messages.length === 0 && !isRunning && isConnected && (
           <div style={{
             flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -406,6 +459,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           }}>
             <Spinner size={24} />
             <p style={{ fontSize: '14px' }}>Connecting to Claude Code...</p>
+            <p style={{ fontSize: '12px' }}>Spawning claude process via ACP</p>
           </div>
         )}
 
