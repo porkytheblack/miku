@@ -2,9 +2,14 @@ mod claude;
 mod commands;
 mod file_ops;
 mod workspace;
+mod window_commands;
 
 pub use commands::*;
 pub use workspace::*;
+
+use tauri::Manager;
+use tauri::tray::TrayIconBuilder;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,6 +27,53 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // System tray
+            let show = MenuItemBuilder::with_id("show", "Show Miku").build(app)?;
+            let new_window = MenuItemBuilder::with_id("new_window", "New Window").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&show)
+                .item(&new_window)
+                .separator()
+                .item(&quit)
+                .build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .tooltip("Miku")
+                .menu(&menu)
+                .on_menu_event(move |app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "new_window" => {
+                            window_commands::create_new_window_inner(app);
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .manage(std::sync::Arc::new(claude::ClaudeProcesses::new()))
@@ -35,6 +87,8 @@ pub fn run() {
             commands::get_recent_files,
             commands::add_recent_file,
             commands::get_app_version,
+            commands::save_session,
+            commands::load_session,
             // Workspace commands
             workspace::get_workspace_info,
             workspace::get_current_workspace,
@@ -50,6 +104,11 @@ pub fn run() {
             claude::claude_prompt,
             claude::claude_cancel,
             claude::claude_version,
+            // Window commands
+            window_commands::set_always_on_top,
+            window_commands::get_always_on_top,
+            window_commands::minimize_to_tray,
+            window_commands::create_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

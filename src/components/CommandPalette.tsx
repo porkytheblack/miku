@@ -435,6 +435,66 @@ export default function CommandPalette({
       });
     }
 
+    // Window management commands (Tauri only)
+    if (inTauri) {
+      cmds.push(
+        {
+          id: 'window.alwaysOnTop',
+          label: 'Toggle Always on Top',
+          category: 'view',
+          action: async () => {
+            try {
+              const { getAlwaysOnTop, setAlwaysOnTop } = await import('@/lib/tauri/commands');
+              const current = await getAlwaysOnTop();
+              await setAlwaysOnTop(!current);
+            } catch {}
+          },
+          keywords: ['pin', 'always', 'top', 'float', 'window'],
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L12 8M12 8L8 5M12 8L16 5" />
+              <rect x="4" y="10" width="16" height="12" rx="2" />
+            </svg>
+          ),
+        },
+        {
+          id: 'window.minimizeToTray',
+          label: 'Minimize to System Tray',
+          category: 'view',
+          action: async () => {
+            try {
+              const { minimizeToTray } = await import('@/lib/tauri/commands');
+              await minimizeToTray();
+            } catch {}
+          },
+          keywords: ['minimize', 'tray', 'hide', 'background'],
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 12h14" />
+            </svg>
+          ),
+        },
+        {
+          id: 'window.newWindow',
+          label: 'New Window',
+          category: 'view',
+          action: async () => {
+            try {
+              const { createNewWindow } = await import('@/lib/tauri/commands');
+              await createNewWindow();
+            } catch {}
+          },
+          keywords: ['new', 'window', 'multiple', 'open'],
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="4" width="14" height="12" rx="2" />
+              <rect x="8" y="8" width="14" height="12" rx="2" />
+            </svg>
+          ),
+        },
+      );
+    }
+
     return cmds;
   }, [
     inTauri,

@@ -20,6 +20,7 @@ const EXTENSIONS_TO_STRIP = [
   '.miku-env', '.mikuenv',
   '.miku-kanban', '.kanban',
   '.miku-docs', '.docs',
+  '.miku-chat',
   '.markdown', '.mdown', '.md',
   '.txt', '.json'
 ];
