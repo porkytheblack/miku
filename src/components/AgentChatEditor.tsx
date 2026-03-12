@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useRemote } from '@/context/RemoteContext';
 import { isTauri } from '@/lib/tauri';
 import {
   AcpClient,
@@ -65,6 +66,7 @@ interface AgentChatEditorProps {
 // ============================================
 export default function AgentChatEditor({ initialContent, onContentChange }: AgentChatEditorProps) {
   const { workspace } = useWorkspace();
+  const { isActive: isRemoteActive, remote: remoteState } = useRemote();
 
   const [doc, setDoc] = useState<AgentChatDocument>(() => {
     if (initialContent) {
@@ -366,6 +368,18 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             connected={isConnected}
             connecting={isConnecting}
           />
+          {isRemoteActive && (
+            <span style={{
+              fontSize: '11px',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              backgroundColor: remoteState.role === 'guest' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+              color: remoteState.role === 'guest' ? '#818cf8' : '#22c55e',
+              fontWeight: 500,
+            }}>
+              {remoteState.role === 'guest' ? 'Remote' : 'Shared'}
+            </span>
+          )}
         </div>
         <div style={S.headerRight}>
           {isConnected && (

@@ -1,6 +1,7 @@
 mod claude;
 mod commands;
 mod file_ops;
+mod file_watcher;
 mod workspace;
 mod window_commands;
 
@@ -85,6 +86,7 @@ pub fn run() {
             Ok(())
         })
         .manage(std::sync::Arc::new(claude::ClaudeProcesses::new()))
+        .manage(std::sync::Mutex::new(file_watcher::FileWatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             // Document commands
             commands::load_settings,
@@ -112,6 +114,11 @@ pub fn run() {
             claude::claude_prompt,
             claude::claude_cancel,
             claude::claude_version,
+            // File watcher commands
+            file_watcher::watch_workspace,
+            file_watcher::unwatch_workspace,
+            file_watcher::get_workspace_manifest,
+            file_watcher::get_file_metadata,
             // Window commands
             window_commands::set_always_on_top,
             window_commands::get_always_on_top,

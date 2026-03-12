@@ -11,9 +11,20 @@ export interface WorkspaceFile {
   children?: WorkspaceFile[];
 }
 
+export type RemoteRole = 'host' | 'guest';
+export type RemoteSyncStatus = 'connected' | 'disconnected' | 'syncing';
+
+export interface WorkspaceRemoteInfo {
+  peerId: string;
+  roomCode: string;
+  role: RemoteRole;
+  status: RemoteSyncStatus;
+}
+
 export interface Workspace {
   path: string;
   name: string;
+  remote?: WorkspaceRemoteInfo;
 }
 
 interface WorkspaceState {
@@ -22,6 +33,7 @@ interface WorkspaceState {
   envFiles: WorkspaceFile[];
   recentWorkspaces: Workspace[];
   isLoading: boolean;
+  remoteStatus: RemoteSyncStatus | null;
 }
 
 interface WorkspaceContextType {
@@ -35,6 +47,10 @@ interface WorkspaceContextType {
   deleteFile: (path: string) => Promise<void>;
   renameFile: (oldPath: string, newName: string) => Promise<void>;
   hasWorkspace: boolean;
+  /** Set the remote status for the current workspace */
+  setRemoteInfo: (info: WorkspaceRemoteInfo | undefined) => void;
+  /** Update just the remote sync status */
+  setRemoteStatus: (status: RemoteSyncStatus | null) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -46,6 +62,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     envFiles: [],
     recentWorkspaces: [],
     isLoading: false,
+    remoteStatus: null,
   });
 
   // Load saved workspace on mount
@@ -129,13 +146,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // Get recent workspaces
       const recentWorkspaces = await invoke<Workspace[]>('get_recent_workspaces');
 
-      setWorkspace({
+      setWorkspace(prev => ({
+        ...prev,
         currentWorkspace: workspaceInfo,
         files,
         envFiles,
         recentWorkspaces,
         isLoading: false,
-      });
+      }));
     } catch (error) {
       console.error('Failed to open workspace:', error);
       setWorkspace(prev => ({ ...prev, isLoading: false }));
@@ -235,6 +253,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshFiles]);
 
+  const setRemoteInfo = useCallback((info: WorkspaceRemoteInfo | undefined) => {
+    setWorkspace(prev => ({
+      ...prev,
+      currentWorkspace: prev.currentWorkspace
+        ? { ...prev.currentWorkspace, remote: info }
+        : prev.currentWorkspace,
+      remoteStatus: info?.status ?? null,
+    }));
+  }, []);
+
+  const setRemoteStatus = useCallback((status: RemoteSyncStatus | null) => {
+    setWorkspace(prev => ({
+      ...prev,
+      remoteStatus: status,
+      currentWorkspace: prev.currentWorkspace?.remote
+        ? {
+            ...prev.currentWorkspace,
+            remote: { ...prev.currentWorkspace.remote, status: status ?? 'disconnected' },
+          }
+        : prev.currentWorkspace,
+    }));
+  }, []);
+
   return (
     <WorkspaceContext.Provider
       value={{
@@ -248,6 +289,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         deleteFile,
         renameFile,
         hasWorkspace: workspace.currentWorkspace !== null,
+        setRemoteInfo,
+        setRemoteStatus,
       }}
     >
       {children}

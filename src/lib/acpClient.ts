@@ -81,6 +81,8 @@ export class AcpClient {
   onStderr: ((text: string) => void) | null = null;
   onLog: ((msg: string) => void) | null = null;
   onDisconnect: (() => void) | null = null;
+  /** Fires for every raw stream event — used by remote relay to forward events */
+  onRawEvent: ((event: Record<string, unknown>) => void) | null = null;
 
   // Session state
   availableModes: Array<{ id: string; name: string }> = [];
@@ -227,6 +229,9 @@ export class AcpClient {
    * Handle a single stream-json event from Claude CLI output.
    */
   private handleStreamEvent(event: Record<string, unknown>): void {
+    // Fire raw event for remote relay
+    this.onRawEvent?.(event);
+
     if (event.type === 'system') {
       return;
     }

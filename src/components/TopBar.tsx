@@ -6,6 +6,8 @@ import { isTauri } from '@/lib/tauri';
 import { getFileTypeFromPath } from '@/lib/fileTypes';
 import type { FileType } from '@/types';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+import { RemoteStatusBadge, RemotePanel } from './RemotePanel';
+import { useRemote } from '@/context/RemoteContext';
 
 interface TopBarProps {
   onToggleFileBrowser?: () => void;
@@ -114,6 +116,7 @@ function TabIcon({ fileType, isActive }: { fileType: FileType; isActive: boolean
 export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, onToggleSettings }: TopBarProps) {
   const { openDocuments, activeDocumentId, switchToDocument, closeDocument, newDoc } = useDocument();
   const [isMounted, setIsMounted] = useState(false);
+  const [isRemotePanelOpen, setIsRemotePanelOpen] = useState(false);
 
   // Only check isTauri after mount to avoid hydration mismatch
   useEffect(() => {
@@ -313,6 +316,11 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
           flexShrink: 0,
         }}
       >
+        {/* Remote status badge */}
+        {inTauri && (
+          <RemoteStatusBadge onClick={() => setIsRemotePanelOpen(true)} />
+        )}
+
         {/* Command palette button */}
         {onToggleCommandPalette && (
           <button
@@ -442,6 +450,12 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
           </button>
         )}
       </div>
+
+      {/* Remote Panel Modal */}
+      <RemotePanel
+        isOpen={isRemotePanelOpen}
+        onClose={() => setIsRemotePanelOpen(false)}
+      />
     </div>
   );
 }

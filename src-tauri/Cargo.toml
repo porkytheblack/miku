@@ -30,3 +30,4 @@ thiserror = "1.0"
 dirs = "5.0"
 tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread", "process", "io-util"] }
 which = "7"
+notify = "7"

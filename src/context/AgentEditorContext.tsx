@@ -46,6 +46,8 @@ import type {
   ClaudePermissionRequestEvent,
   ClaudeErrorEvent,
 } from '@/lib/agent/claude-events';
+import type { AgentRelayHost, AgentRelayRemote } from '@/lib/remote/agentRelay';
+import type { AcpSessionUpdate } from '@/lib/acpClient';
 
 // ============================================
 // State Types
@@ -112,7 +114,12 @@ type AgentEditorAction =
   | { type: 'UPDATE_STREAMING_MESSAGE'; content: string; thinking?: string }
   | { type: 'END_STREAMING' }
   | { type: 'ADD_APPROVAL_WITH_REQUEST_ID'; approval: Omit<AgentApprovalRequest, 'id' | 'createdAt' | 'status'>; requestId: string }
-  | { type: 'CLEAR_APPROVAL_MAP' };
+  | { type: 'CLEAR_APPROVAL_MAP' }
+
+  // Remote relay operations
+  | { type: 'REMOTE_AGENT_EVENT'; event: AcpSessionUpdate }
+  | { type: 'REMOTE_AGENT_STATUS'; activityStatus: AgentActivityStatus; connectionStatus: AgentConnectionStatus }
+  | { type: 'REMOTE_SESSION_STATE'; conversation: AgentMessage[]; tasks: AgentTask[] };
 
 // ============================================
 // Reducer
@@ -532,6 +539,85 @@ function agentEditorReducer(state: AgentEditorState, action: AgentEditorAction):
       };
     }
 
+    // Remote relay operations
+    case 'REMOTE_AGENT_EVENT': {
+      const event = action.event;
+
+      if (event.type === 'agent_message_chunk' && event.text) {
+        // Append text to the streaming message
+        if (!state.streamingMessageId) {
+          // Create a new streaming message if none exists
+          const newMsg = createMessage('assistant', event.text, undefined);
+          return {
+            ...state,
+            document: {
+              ...state.document,
+              conversation: [...state.document.conversation, newMsg],
+            },
+            streamingMessageId: newMsg.id,
+            ui: { ...state.ui, isGenerating: true, activityStatus: 'working' },
+            isModified: true,
+          };
+        }
+
+        return {
+          ...state,
+          document: {
+            ...state.document,
+            conversation: state.document.conversation.map(msg =>
+              msg.id === state.streamingMessageId
+                ? { ...msg, content: msg.content + event.text }
+                : msg
+            ),
+          },
+          ui: { ...state.ui, activityStatus: 'working' },
+        };
+      }
+
+      if (event.type === 'agent_thought_chunk' && event.text && state.streamingMessageId) {
+        return {
+          ...state,
+          document: {
+            ...state.document,
+            conversation: state.document.conversation.map(msg =>
+              msg.id === state.streamingMessageId
+                ? { ...msg, metadata: { ...msg.metadata, thinking: (msg.metadata?.thinking ?? '') + event.text } }
+                : msg
+            ),
+          },
+        };
+      }
+
+      return state;
+    }
+
+    case 'REMOTE_AGENT_STATUS': {
+      const isGenerating = action.activityStatus === 'thinking' || action.activityStatus === 'working';
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          activityStatus: action.activityStatus,
+          connectionStatus: action.connectionStatus,
+          isGenerating,
+        },
+        // End streaming if agent went idle
+        streamingMessageId: action.activityStatus === 'idle' ? null : state.streamingMessageId,
+      };
+    }
+
+    case 'REMOTE_SESSION_STATE': {
+      return {
+        ...state,
+        document: {
+          ...state.document,
+          conversation: action.conversation,
+          tasks: action.tasks,
+        },
+        isModified: true,
+      };
+    }
+
     default:
       return state;
   }
@@ -603,6 +689,14 @@ interface AgentEditorContextType {
   respondToPermission: (approvalId: string, granted: boolean) => Promise<void>;
   /** Check if Claude is currently connected */
   isClaudeConnected: () => boolean;
+
+  // Remote relay methods
+  /** Dispatch a remote agent event (used by RemoteContext) */
+  dispatchRemoteEvent: (event: AcpSessionUpdate) => void;
+  /** Dispatch a remote status update */
+  dispatchRemoteStatus: (activityStatus: AgentActivityStatus, connectionStatus: AgentConnectionStatus) => void;
+  /** Dispatch full session state from remote */
+  dispatchRemoteSessionState: (conversation: AgentMessage[], tasks: AgentTask[]) => void;
 }
 
 const AgentEditorContext = createContext<AgentEditorContextType | undefined>(undefined);
@@ -934,6 +1028,19 @@ export function AgentEditorProvider({ children }: { children: ReactNode }) {
     return bridgeRef.current?.isActive() ?? false;
   }, []);
 
+  // Remote relay dispatch methods
+  const dispatchRemoteEvent = useCallback((event: AcpSessionUpdate) => {
+    dispatch({ type: 'REMOTE_AGENT_EVENT', event });
+  }, []);
+
+  const dispatchRemoteStatus = useCallback((activityStatus: AgentActivityStatus, connectionStatus: AgentConnectionStatus) => {
+    dispatch({ type: 'REMOTE_AGENT_STATUS', activityStatus, connectionStatus });
+  }, []);
+
+  const dispatchRemoteSessionState = useCallback((conversation: AgentMessage[], tasks: AgentTask[]) => {
+    dispatch({ type: 'REMOTE_SESSION_STATE', conversation, tasks });
+  }, []);
+
   const value: AgentEditorContextType = {
     state,
     loadContent,
@@ -974,6 +1081,10 @@ export function AgentEditorProvider({ children }: { children: ReactNode }) {
     sendToClaud,
     respondToPermission,
     isClaudeConnected,
+    // Remote relay methods
+    dispatchRemoteEvent,
+    dispatchRemoteStatus,
+    dispatchRemoteSessionState,
   };
 
   return (
