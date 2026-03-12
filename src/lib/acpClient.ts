@@ -93,7 +93,6 @@ interface StreamMessageEvent {
 }
 
 const CONNECT_TIMEOUT_MS = 10_000;
-const PROMPT_FIRST_OUTPUT_TIMEOUT_MS = 30_000; // max time to wait for first stdout
 
 // ============================================
 // Claude Client
@@ -103,7 +102,7 @@ export class AcpClient {
   private cwd: string = '';
   private sessionId: string | null = null;
   private scopeName: string | null = null;
-  private currentProcess: { kill: () => Promise<void> } | null = null;
+  private currentExecute: AbortController | null = null;
   private _isConnected = false;
   private stderrBuffer: string[] = [];
 
@@ -185,7 +184,7 @@ export class AcpClient {
 
   /**
    * Send a prompt to Claude Code.
-   * Spawns a new `claude -p` process with streaming JSON output.
+   * Runs `claude -p` via execute() and processes stream-json output after completion.
    * Multi-turn conversations use --resume with the session ID.
    */
   async prompt(text: string): Promise<{ resultText: string }> {
@@ -196,159 +195,61 @@ export class AcpClient {
     const { Command } = await import('@tauri-apps/plugin-shell');
 
     // Build args — flags BEFORE -p to avoid them being consumed as prompt text
+    // Use stream-json for structured output with tool calls and thinking
     const args = ['--output-format', 'stream-json'];
     if (this.sessionId) {
       args.push('--resume', this.sessionId);
     }
     args.push('-p', text);
 
-    this.log(`Spawning claude prompt (session=${this.sessionId || 'new'}, args=${JSON.stringify(args)})`);
+    this.log(`Running claude prompt via execute() (session=${this.sessionId || 'new'})`);
 
-    // Quick diagnostic: run a simple execute() to check if claude -p works at all
-    // This helps distinguish "process hangs" from "spawn events not firing"
-    if (!this.sessionId) {
+    // Use execute() instead of spawn() — Tauri's spawn() doesn't reliably
+    // deliver stdout events, but execute() collects all output and works.
+    // Trade-off: no real-time streaming, but the response arrives in full.
+    const result = await Command.create(this.scopeName!, args, { cwd: this.cwd }).execute();
+
+    if (result.stderr) {
+      this.stderrBuffer.push(result.stderr);
+      this.onStderr?.(result.stderr);
+    }
+
+    // Process all stream-json lines from the collected stdout
+    let resultText = '';
+    const toolCallMap = new Map<string, AcpToolCallInfo>();
+    const toolInputBuffers = new Map<number, { id: string; name: string; partialJson: string }>();
+
+    const lines = result.stdout.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
       try {
-        this.log('Running diagnostic: claude -p "hi" --output-format json (via execute)...');
-        const diagResult = await this.withTimeout(
-          () => Command.create(this.scopeName!, ['--output-format', 'json', '-p', 'hi'], { cwd: this.cwd }).execute(),
-          15_000,
-          'Diagnostic timed out after 15s',
-        );
-        this.log(`Diagnostic result: code=${diagResult.code}, stdout=${diagResult.stdout.length} chars, stderr=${diagResult.stderr.slice(0, 200)}`);
-        if (diagResult.stdout) {
-          this.log(`Diagnostic stdout preview: ${diagResult.stdout.slice(0, 300)}`);
+        const event = JSON.parse(trimmed);
+        this.handleStreamEvent(event, toolCallMap, toolInputBuffers);
+
+        // Extract session ID from init
+        if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
+          this.sessionId = event.session_id;
+          this.log(`Session ID: ${this.sessionId}`);
         }
-        // Extract session ID from diagnostic if available
-        if (diagResult.stdout) {
-          try {
-            const parsed = JSON.parse(diagResult.stdout);
-            if (parsed.session_id) {
-              this.sessionId = parsed.session_id;
-              this.log(`Got session from diagnostic: ${this.sessionId}`);
-            }
-          } catch { /* not json or no session */ }
+
+        // Collect result text
+        if (event.type === 'result' && event.result) {
+          resultText = event.result;
         }
-      } catch (err) {
-        this.log(`Diagnostic failed: ${err instanceof Error ? err.message : String(err)}`);
-        // Don't fail — continue to the actual prompt attempt
+      } catch {
+        this.log(`Failed to parse stream event: ${trimmed.slice(0, 200)}`);
       }
     }
 
-    return new Promise<{ resultText: string }>((resolve, reject) => {
-      let resultText = '';
-      let lineBuffer = '';
-      const toolCallMap = new Map<string, AcpToolCallInfo>();
-      const toolInputBuffers = new Map<number, { id: string; name: string; partialJson: string }>();
-      let rejected = false;
-      let gotStdout = false;
-      let firstOutputTimer: ReturnType<typeof setTimeout> | null = null;
+    if (result.code !== 0 && !resultText) {
+      const stderr = result.stderr.trim();
+      throw new Error(stderr || `Claude exited with code ${result.code}`);
+    }
 
-      const command = Command.create(this.scopeName!, args, {
-        cwd: this.cwd,
-      });
-
-      command.stdout.on('data', (data: string) => {
-        if (!gotStdout) {
-          gotStdout = true;
-          if (firstOutputTimer) clearTimeout(firstOutputTimer);
-          this.log(`First stdout chunk (${data.length} chars)`);
-        }
-        lineBuffer += data;
-
-        // Split on newlines — each line is a JSON event
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          try {
-            const event = JSON.parse(trimmed);
-            this.handleStreamEvent(event, toolCallMap, toolInputBuffers);
-
-            // Extract session ID from init
-            if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
-              this.sessionId = event.session_id;
-              this.log(`Session ID: ${this.sessionId}`);
-            }
-
-            // Collect result text
-            if (event.type === 'result' && event.result) {
-              resultText = event.result;
-            }
-          } catch {
-            this.log(`Failed to parse stream event: ${trimmed.slice(0, 200)}`);
-          }
-        }
-      });
-
-      command.stderr.on('data', (data: string) => {
-        this.stderrBuffer.push(data);
-        this.onStderr?.(data);
-      });
-
-      command.on('close', (data: { code: number | null }) => {
-        if (firstOutputTimer) clearTimeout(firstOutputTimer);
-        // Process remaining buffer
-        if (lineBuffer.trim()) {
-          try {
-            const event = JSON.parse(lineBuffer.trim());
-            this.handleStreamEvent(event, toolCallMap, toolInputBuffers);
-            if (event.type === 'result' && event.result) {
-              resultText = event.result;
-            }
-          } catch { /* ignore */ }
-        }
-
-        this.currentProcess = null;
-
-        if (!rejected) {
-          if (data.code === 0 || resultText) {
-            resolve({ resultText });
-          } else {
-            const stderr = this.stderrBuffer.slice(-5).join('').trim();
-            reject(new Error(stderr || `Claude exited with code ${data.code}`));
-          }
-        }
-      });
-
-      command.on('error', (error: string) => {
-        this.log(`Process error: ${error}`);
-        this.currentProcess = null;
-        rejected = true;
-        reject(new Error(`Failed to run Claude: ${error}`));
-      });
-
-      // Timeout if we never get any stdout (process might be stuck)
-      firstOutputTimer = setTimeout(() => {
-        if (!gotStdout && !rejected) {
-          const stderr = this.stderrBuffer.slice(-10).join('').trim();
-          this.log(`Timeout: no stdout after ${PROMPT_FIRST_OUTPUT_TIMEOUT_MS / 1000}s`);
-          rejected = true;
-          if (this.currentProcess) {
-            this.currentProcess.kill().catch(() => {});
-            this.currentProcess = null;
-          }
-          reject(new Error(
-            `Claude process produced no output after ${PROMPT_FIRST_OUTPUT_TIMEOUT_MS / 1000}s.\n` +
-            (stderr ? `stderr:\n${stderr}\n\n` : '') +
-            'This may indicate:\n' +
-            '- Claude Code needs authentication (run "claude" in your terminal first)\n' +
-            '- The working directory is inaccessible\n' +
-            '- Claude Code is stuck on an interactive prompt'
-          ));
-        }
-      }, PROMPT_FIRST_OUTPUT_TIMEOUT_MS);
-
-      command.spawn().then((child: { kill: () => Promise<void> }) => {
-        this.currentProcess = child;
-      }).catch((err: Error) => {
-        if (firstOutputTimer) clearTimeout(firstOutputTimer);
-        rejected = true;
-        reject(new Error(`Could not start Claude Code.\n${err.message}`));
-      });
-    });
+    this.log(`Prompt complete (${result.stdout.length} chars stdout, session=${this.sessionId})`);
+    return { resultText };
   }
 
   /**
@@ -503,14 +404,12 @@ export class AcpClient {
   }
 
   /**
-   * Cancel the current prompt by killing the process
+   * Cancel the current prompt
    */
   async cancel(): Promise<void> {
-    if (this.currentProcess) {
-      try {
-        await this.currentProcess.kill();
-      } catch { /* already dead */ }
-      this.currentProcess = null;
+    if (this.currentExecute) {
+      this.currentExecute.abort();
+      this.currentExecute = null;
     }
   }
 
