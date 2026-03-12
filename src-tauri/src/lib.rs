@@ -1,3 +1,4 @@
+mod claude;
 mod commands;
 mod file_ops;
 mod workspace;
@@ -23,6 +24,7 @@ pub fn run() {
             }
             Ok(())
         })
+        .manage(std::sync::Arc::new(claude::ClaudeProcesses::new()))
         .invoke_handler(tauri::generate_handler![
             // Document commands
             commands::load_settings,
@@ -44,6 +46,10 @@ pub fn run() {
             workspace::create_folder,
             workspace::delete_file,
             workspace::rename_file,
+            // Claude commands
+            claude::claude_prompt,
+            claude::claude_cancel,
+            claude::claude_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

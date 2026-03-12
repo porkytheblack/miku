@@ -28,4 +28,5 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 thiserror = "1.0"
 dirs = "5.0"
-tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread", "process", "io-util"] }
+which = "7"

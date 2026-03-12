@@ -52,6 +52,10 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const clientRef = useRef<AcpClient | null>(null);
+  // Refs to accumulate streaming data (read at prompt completion)
+  const streamContentRef = useRef('');
+  const streamThoughtRef = useRef('');
+  const streamToolCallsRef = useRef<Map<string, AcpToolCallInfo>>(new Map());
 
   const inTauri = isTauri();
 
@@ -90,23 +94,26 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     try {
       const client = new AcpClient();
 
-      // Session update handler
+      // Session update handler — updates both React state (for UI) and refs (for final message)
       client.onSessionUpdate = (update: AcpSessionUpdate) => {
         switch (update.type) {
           case 'agent_message_chunk':
             if (update.text) {
+              streamContentRef.current += update.text;
               setStreamingContent(prev => prev + update.text);
             }
             break;
 
           case 'agent_thought_chunk':
             if (update.text) {
+              streamThoughtRef.current += update.text;
               setStreamingThought(prev => prev + update.text);
             }
             break;
 
           case 'tool_call':
             if (update.toolCall) {
+              streamToolCallsRef.current.set(update.toolCall.toolCallId, update.toolCall);
               setActiveToolCalls(prev => {
                 const next = new Map(prev);
                 next.set(update.toolCall!.toolCallId, update.toolCall!);
@@ -117,10 +124,12 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
           case 'tool_call_update':
             if (update.toolCall) {
+              const existing = streamToolCallsRef.current.get(update.toolCall.toolCallId);
+              streamToolCallsRef.current.set(update.toolCall.toolCallId, { ...existing, ...update.toolCall });
               setActiveToolCalls(prev => {
                 const next = new Map(prev);
-                const existing = next.get(update.toolCall!.toolCallId);
-                next.set(update.toolCall!.toolCallId, { ...existing, ...update.toolCall! });
+                const ex = next.get(update.toolCall!.toolCallId);
+                next.set(update.toolCall!.toolCallId, { ...ex, ...update.toolCall! });
                 return next;
               });
             }
@@ -197,6 +206,10 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     setStreamingContent('');
     setStreamingThought('');
     setActiveToolCalls(new Map());
+    // Reset accumulation refs
+    streamContentRef.current = '';
+    streamThoughtRef.current = '';
+    streamToolCallsRef.current = new Map();
 
     const userMsg: AgentChatMessage = {
       id: generateMessageId(),
@@ -212,17 +225,34 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     try {
       const { resultText } = await clientRef.current.prompt(text);
 
-      // Build assistant message from the result
-      const assistantMsg: AgentChatMessage = {
+      // Build final messages from accumulated streaming data (refs)
+      const finalMessages: AgentChatMessage[] = [...newMessages];
+
+      // Add thought if any
+      if (streamThoughtRef.current) {
+        finalMessages.push({
+          id: generateMessageId(),
+          role: 'thought',
+          content: streamThoughtRef.current,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Use streamed content if available, fall back to resultText
+      const content = streamContentRef.current || resultText || '';
+      const toolCalls = streamToolCallsRef.current.size > 0
+        ? Array.from(streamToolCallsRef.current.values())
+        : undefined;
+
+      finalMessages.push({
         id: generateMessageId(),
         role: 'assistant',
-        content: resultText || '',
+        content,
         timestamp: new Date().toISOString(),
-      };
+        toolCalls,
+      });
 
-      const finalMessages = [...newMessages, assistantMsg];
       setMessages(finalMessages);
-      // Defer persistDoc to avoid setState-during-render
       queueMicrotask(() => persistDoc(finalMessages));
     } catch (err) {
       if ((err as Error).message !== 'cancelled') {
