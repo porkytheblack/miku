@@ -99,7 +99,7 @@ export function AIConfigProvider({ children }: { children: ReactNode }) {
 
   // Local providers don't require API keys
   const isLocalProvider = config?.provider === 'ollama' || config?.provider === 'lmstudio';
-  const isConfigured = config !== null && (isLocalProvider || config.apiKey.length > 0);
+  const isConfigured = config !== null && (isLocalProvider || config?.apiKey?.length > 0);
 
   return (
     <AIConfigContext.Provider
