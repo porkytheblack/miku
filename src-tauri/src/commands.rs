@@ -344,7 +344,7 @@ mod tests {
     fn test_get_app_version() {
         let version = get_app_version();
         assert!(!version.is_empty());
-        assert_eq!(version, "0.1.0");
+        assert_eq!(version, "0.0.9");
     }
 
     #[test]

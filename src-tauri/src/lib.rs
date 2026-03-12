@@ -43,7 +43,7 @@ pub fn run() {
                     .build()?;
 
                 let _tray = TrayIconBuilder::new()
-                    .icon(app.default_window_icon().cloned().unwrap())
+                    .icon(app.default_window_icon().cloned().expect("default window icon must be set in tauri.conf.json"))
                     .tooltip("Miku")
                     .menu(&menu)
                     .on_menu_event(move |app_handle: &tauri::AppHandle, event| {

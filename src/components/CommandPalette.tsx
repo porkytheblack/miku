@@ -510,6 +510,8 @@ export default function CommandPalette({
     onToggleGlobalSearch,
     onRequestEnvFileName,
     onRequestAgentChatFileName,
+    onRequestKanbanFileName,
+    onRequestDocsFileName,
     workspace,
   ]);
 

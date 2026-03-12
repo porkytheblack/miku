@@ -306,7 +306,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
       setStreamingThought('');
       setActiveToolCalls(new Map());
     }
-  }, [input, isRunning, messages, persistDoc]);
+  }, [input, isRunning, messages, persistDoc, permissionMode, selectedModel]);
 
   const handleCancel = useCallback(async () => {
     await clientRef.current?.cancel();
@@ -1687,8 +1687,8 @@ function HeaderDropdown({ label, color, disabled, children }: {
         style={{
           display: 'flex', alignItems: 'center', gap: '4px',
           fontSize: '10px', padding: '2px 8px',
-          background: `${color}14`,
-          border: `1px solid ${color}40`,
+          background: color.startsWith('#') ? `${color}14` : 'transparent',
+          border: `1px solid ${color.startsWith('#') ? `${color}40` : 'var(--border-primary)'}`,
           borderRadius: 'var(--radius-full)',
           color,
           fontWeight: 500,
