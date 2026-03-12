@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { isTauri } from '@/lib/tauri';
 import {
@@ -17,6 +18,11 @@ import {
   createAgentChatDocument,
   generateMessageId,
 } from '@/lib/agentChat';
+
+const MarkdownPreview = dynamic(
+  () => import('@uiw/react-markdown-preview').then(mod => mod.default),
+  { ssr: false, loading: () => null }
+);
 
 // ============================================
 // Types
@@ -456,8 +462,17 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             {streamingContent && (
               <div style={S.streamBlock}>
                 <div style={S.streamLabel}>{agentName}</div>
-                <div style={S.streamContent}>
-                  {streamingContent}
+                <div className="agent-chat-markdown" style={S.streamContent}>
+                  <MarkdownPreview
+                    source={streamingContent}
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      fontSize: 'var(--text-sm)',
+                      lineHeight: 'var(--leading-relaxed)',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  />
                   <span style={S.cursor} />
                 </div>
               </div>
@@ -525,6 +540,105 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Markdown styling for agent chat messages */
+        .agent-chat-markdown .wmde-markdown {
+          background: transparent !important;
+          font-family: var(--font-sans) !important;
+        }
+        .agent-chat-markdown .wmde-markdown h1,
+        .agent-chat-markdown .wmde-markdown h2,
+        .agent-chat-markdown .wmde-markdown h3,
+        .agent-chat-markdown .wmde-markdown h4,
+        .agent-chat-markdown .wmde-markdown h5,
+        .agent-chat-markdown .wmde-markdown h6 {
+          color: var(--text-primary);
+          border-bottom-color: var(--border-default);
+          margin-top: 1em;
+          margin-bottom: 0.5em;
+          line-height: 1.4;
+        }
+        .agent-chat-markdown .wmde-markdown h1 { font-size: 1.25em; }
+        .agent-chat-markdown .wmde-markdown h2 { font-size: 1.15em; }
+        .agent-chat-markdown .wmde-markdown h3 { font-size: 1.05em; }
+        .agent-chat-markdown .wmde-markdown p {
+          color: var(--text-primary);
+          margin: 0.5em 0;
+        }
+        .agent-chat-markdown .wmde-markdown li {
+          color: var(--text-primary);
+        }
+        .agent-chat-markdown .wmde-markdown ul,
+        .agent-chat-markdown .wmde-markdown ol {
+          padding-left: 1.5em;
+          margin: 0.5em 0;
+        }
+        .agent-chat-markdown .wmde-markdown a {
+          color: var(--accent-primary);
+          text-decoration: none;
+        }
+        .agent-chat-markdown .wmde-markdown a:hover {
+          text-decoration: underline;
+        }
+        .agent-chat-markdown .wmde-markdown code {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          padding: 1px 4px;
+          border-radius: var(--radius-sm);
+          font-family: var(--font-mono);
+          font-size: 0.88em;
+        }
+        .agent-chat-markdown .wmde-markdown pre {
+          background: var(--bg-tertiary) !important;
+          border-radius: var(--radius-md);
+          padding: var(--space-3) !important;
+          margin: 0.5em 0;
+          overflow-x: auto;
+        }
+        .agent-chat-markdown .wmde-markdown pre code {
+          background: transparent;
+          padding: 0;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .agent-chat-markdown .wmde-markdown blockquote {
+          border-left: 3px solid var(--border-default);
+          color: var(--text-secondary);
+          margin: 0.5em 0;
+          padding: 0.25em 1em;
+        }
+        .agent-chat-markdown .wmde-markdown table {
+          border-collapse: collapse;
+          margin: 0.5em 0;
+          width: 100%;
+        }
+        .agent-chat-markdown .wmde-markdown table th,
+        .agent-chat-markdown .wmde-markdown table td {
+          border: 1px solid var(--border-default);
+          padding: var(--space-1) var(--space-2);
+          font-size: 0.9em;
+        }
+        .agent-chat-markdown .wmde-markdown table th {
+          background: var(--bg-tertiary);
+          font-weight: 600;
+        }
+        .agent-chat-markdown .wmde-markdown hr {
+          background-color: var(--border-default);
+          border: none;
+          height: 1px;
+          margin: 1em 0;
+        }
+        .agent-chat-markdown .wmde-markdown img {
+          max-width: 100%;
+          border-radius: var(--radius-md);
+        }
+        .agent-chat-markdown .wmde-markdown strong {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
+        .agent-chat-markdown .wmde-markdown em {
+          color: var(--text-secondary);
+        }
       `}</style>
     </div>
   );
@@ -684,15 +798,30 @@ function ChatMessage({ message, agentName }: { message: AgentChatMessage; agentN
           }}>
             {isUser ? 'You' : agentName}
           </div>
-          <div style={{
-            fontSize: 'var(--text-sm)',
-            lineHeight: 'var(--leading-relaxed)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            color: 'var(--text-primary)',
-          }}>
-            {message.content}
-          </div>
+          {isUser ? (
+            <div style={{
+              fontSize: 'var(--text-sm)',
+              lineHeight: 'var(--leading-relaxed)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              color: 'var(--text-primary)',
+            }}>
+              {message.content}
+            </div>
+          ) : (
+            <div className="agent-chat-markdown">
+              <MarkdownPreview
+                source={message.content}
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-primary)',
+                  fontSize: 'var(--text-sm)',
+                  lineHeight: 'var(--leading-relaxed)',
+                  fontFamily: 'var(--font-sans)',
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
