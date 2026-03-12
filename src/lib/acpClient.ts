@@ -71,6 +71,7 @@ export class AcpClient {
   onPermissionRequest: ((req: AcpPermissionRequest) => Promise<{ optionId: string } | 'cancelled'>) | null = null;
   onError: ((error: string) => void) | null = null;
   onStderr: ((text: string) => void) | null = null;
+  onLog: ((msg: string) => void) | null = null;
   onDisconnect: (() => void) | null = null;
 
   // Session state
@@ -88,22 +89,24 @@ export class AcpClient {
       throw new Error('ACP client requires Tauri desktop app to spawn Claude Code');
     }
 
-    // Dynamically import Tauri shell plugin
     const { Command } = await import('@tauri-apps/plugin-shell');
+    this.stderrBuffer = [];
 
-    // Track whether the process exited before we finished connecting
-    let earlyExitCode: number | null = null;
-    let earlyExitError: string | null = null;
+    // Step 1: Verify claude is accessible by running --version
+    const scopeName = await this.findClaudeCommand(Command);
+    this.log(`Using scope "${scopeName}" to spawn claude`);
+
+    // Step 2: Spawn claude with ACP mode
     let earlyExitReject: ((err: Error) => void) | null = null;
 
-    // Spawn claude with ACP mode
-    const command = Command.create('claude', ['--ide'], {
+    const command = Command.create(scopeName, ['--ide'], {
       cwd,
       encoding: 'raw',
     });
 
     // Create Web Streams bridging Tauri events
     let readableController: ReadableStreamDefaultController<Uint8Array>;
+    let gotStdout = false;
 
     const readable = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -111,15 +114,18 @@ export class AcpClient {
       },
     });
 
-    // Listen for stdout data
     command.stdout.on('data', (data: Uint8Array) => {
+      if (!gotStdout) {
+        gotStdout = true;
+        const preview = new TextDecoder().decode(data.slice(0, 200));
+        this.log(`First stdout chunk (${data.byteLength} bytes): ${preview}`);
+      }
       readableController.enqueue(data);
     });
 
-    // Collect stderr and forward to UI
     command.stderr.on('data', (data: Uint8Array) => {
       const text = new TextDecoder().decode(data);
-      console.error('[claude stderr]', text);
+      this.log(`stderr: ${text}`);
       this.stderrBuffer.push(text);
       this.onStderr?.(text);
     });
@@ -128,13 +134,12 @@ export class AcpClient {
       try { readableController.close(); } catch { /* already closed */ }
 
       if (!this.isConnected) {
-        // Process exited during connection setup
-        earlyExitCode = data.code;
         const stderr = this.stderrBuffer.join('').trim();
-        earlyExitError = stderr
+        const msg = stderr
           ? `Claude Code exited (code ${data.code}): ${stderr}`
           : `Claude Code exited with code ${data.code}. Is Claude Code installed and logged in?`;
-        earlyExitReject?.(new Error(earlyExitError));
+        this.log(msg);
+        earlyExitReject?.(new Error(msg));
       } else {
         this.isConnected = false;
         this.onDisconnect?.();
@@ -142,51 +147,47 @@ export class AcpClient {
     });
 
     command.on('error', (error: string) => {
-      console.error('[claude error]', error);
+      this.log(`Process error: ${error}`);
       if (!this.isConnected) {
-        earlyExitError = `Failed to spawn Claude Code: ${error}`;
-        earlyExitReject?.(new Error(earlyExitError));
+        earlyExitReject?.(new Error(`Failed to spawn Claude Code: ${error}`));
       } else {
         this.onError?.(error);
       }
       try { readableController.close(); } catch { /* already closed */ }
     });
 
-    // Spawn the process
     let child;
     try {
       child = await command.spawn();
+      this.log('Process spawned successfully');
     } catch (err) {
       const stderr = this.stderrBuffer.join('').trim();
       throw new Error(
-        `Could not start Claude Code. Is it installed?\n${stderr || (err instanceof Error ? err.message : String(err))}`
+        `Could not start Claude Code.\n${stderr || (err instanceof Error ? err.message : String(err))}`
       );
     }
     this.childProcess = child;
 
-    // Create writable stream that writes to stdin
     const writable = new WritableStream<Uint8Array>({
       async write(chunk) {
         await child.write(chunk);
       },
     });
 
-    // Create ACP stream
     const stream = acp.ndJsonStream(writable, readable);
 
-    // Create ACP connection with our Client implementation
     this.connection = new acp.ClientSideConnection(
       (_agent) => this.createClientHandler(),
       stream,
     );
 
-    // Listen for connection close
     this.connection.signal.addEventListener('abort', () => {
       this.isConnected = false;
       this.onDisconnect?.();
     });
 
-    // Initialize with timeout + early-exit detection
+    // Step 3: Initialize ACP connection
+    this.log('Sending ACP initialize request...');
     const initResult = await this.withTimeout(
       (reject) => {
         earlyExitReject = reject;
@@ -206,18 +207,19 @@ export class AcpClient {
         });
       },
       CONNECT_TIMEOUT_MS,
-      'Claude Code did not respond to initialization. Check that `claude` is installed and supports --ide.',
+      `Claude Code did not respond to ACP initialization within ${CONNECT_TIMEOUT_MS / 1000}s.\n\n` +
+      'Possible causes:\n' +
+      '- The `--ide` flag may not be supported by your Claude Code version\n' +
+      '- Claude Code may be starting but not in ACP mode\n' +
+      `- Process received stdout: ${gotStdout ? 'yes' : 'no'}`,
     );
 
-    // Check if process died during init
-    if (earlyExitCode !== null) {
-      throw new Error(earlyExitError ?? 'Claude Code exited unexpectedly');
-    }
-
+    this.log(`Initialize response received: agent=${initResult.agentInfo?.name}`);
     this.agentInfo = initResult.agentInfo ?? null;
     this.isConnected = true;
 
-    // Create a session (also with timeout)
+    // Step 4: Create a session
+    this.log('Creating ACP session...');
     const sessionResult = await this.withTimeout(
       (reject) => {
         earlyExitReject = reject;
@@ -231,14 +233,46 @@ export class AcpClient {
     );
 
     this.sessionId = sessionResult.sessionId;
+    this.log(`Session created: ${this.sessionId}`);
 
-    // Store modes if available
     if (sessionResult.modes) {
       this.availableModes = sessionResult.modes.availableModes ?? [];
       this.currentModeId = sessionResult.modes.currentModeId ?? null;
     }
 
     earlyExitReject = null;
+  }
+
+  /**
+   * Try both 'claude' and 'claude-cmd' scope names to find one that works.
+   * On Windows, npm global installs create .cmd wrappers.
+   */
+  private async findClaudeCommand(Command: Awaited<typeof import('@tauri-apps/plugin-shell')>['Command']): Promise<string> {
+    const scopes = ['claude', 'claude-cmd'];
+
+    for (const scope of scopes) {
+      try {
+        this.log(`Trying "${scope}" scope with --version...`);
+        const result = await Command.create(scope, ['--version']).execute();
+        const version = result.stdout.trim() || result.stderr.trim();
+        this.log(`"${scope}" responded: ${version} (code ${result.code})`);
+
+        if (result.code === 0 || version) {
+          this.stderrBuffer.push(`Claude version: ${version}\n`);
+          this.onStderr?.(`Claude version: ${version}\n`);
+          return scope;
+        }
+      } catch (err) {
+        this.log(`"${scope}" failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    throw new Error(
+      'Could not find Claude Code.\n\n' +
+      'Tried: claude, claude.cmd\n\n' +
+      'Make sure Claude Code is installed and in your PATH.\n' +
+      'You can verify by running "claude --version" in your terminal.'
+    );
   }
 
   /**
@@ -311,6 +345,11 @@ export class AcpClient {
   // ============================================
   // Helpers
   // ============================================
+
+  private log(msg: string): void {
+    console.log(`[AcpClient] ${msg}`);
+    this.onLog?.(msg);
+  }
 
   /**
    * Race a promise against a timeout and an optional early-reject callback.

@@ -159,6 +159,11 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         setStderrLog(prev => prev + text);
       };
 
+      // Log handler (connection diagnostics)
+      client.onLog = (msg: string) => {
+        setStderrLog(prev => prev + `[log] ${msg}\n`);
+      };
+
       // Disconnect handler
       client.onDisconnect = () => {
         setIsConnected(false);
@@ -508,6 +513,17 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             <Spinner size={24} />
             <p style={{ fontSize: '14px' }}>Connecting to Claude Code...</p>
             <p style={{ fontSize: '12px' }}>Spawning claude process via ACP</p>
+            {stderrLog && (
+              <pre style={{
+                marginTop: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)',
+                borderRadius: '6px', fontSize: '11px', lineHeight: '1.4',
+                overflow: 'auto', maxHeight: '200px', maxWidth: '480px', width: '100%',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                color: 'var(--text-tertiary)',
+              }}>
+                {stderrLog}
+              </pre>
+            )}
           </div>
         )}
 
