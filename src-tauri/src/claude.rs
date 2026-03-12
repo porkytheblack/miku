@@ -78,6 +78,8 @@ pub async fn claude_prompt(
     prompt: String,
     cwd: String,
     session_id: Option<String>,
+    skip_permissions: Option<bool>,
+    allowed_tools: Option<Vec<String>>,
 ) -> Result<(), MikuError> {
     let claude_bin = find_claude_binary()?;
 
@@ -86,6 +88,15 @@ pub async fn claude_prompt(
         "--output-format".to_string(),
         "stream-json".to_string(),
     ];
+    if skip_permissions.unwrap_or(false) {
+        args.push("--dangerously-skip-permissions".to_string());
+    }
+    if let Some(tools) = &allowed_tools {
+        if !tools.is_empty() {
+            args.push("--allowedTools".to_string());
+            args.push(tools.join(","));
+        }
+    }
     if let Some(sid) = &session_id {
         args.push("--resume".to_string());
         args.push(sid.clone());

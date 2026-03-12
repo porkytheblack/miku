@@ -48,6 +48,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [availableModes, setAvailableModes] = useState<Array<{ id: string; name: string }>>([]);
   const [currentMode, setCurrentMode] = useState<string | null>(null);
   const [cwdInput, setCwdInput] = useState(doc.agentConfig.cwd || workspace.currentWorkspace?.path || '');
+  const [permissionMode, setPermissionMode] = useState<'auto-approve' | 'allowed-tools'>('auto-approve');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -169,6 +170,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
       };
 
       const cwd = cwdInput.trim() || workspace.currentWorkspace?.path || '.';
+      client.permissionMode = permissionMode;
       await client.connect(cwd);
 
       clientRef.current = client;
@@ -187,7 +189,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     } finally {
       setIsConnecting(false);
     }
-  }, [inTauri, cwdInput, workspace.currentWorkspace?.path]);
+  }, [inTauri, cwdInput, permissionMode, workspace.currentWorkspace?.path]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -342,6 +344,18 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           }}>
             CLI
           </span>
+          {isConnected && (
+            <span style={{
+              fontSize: '10px', padding: '2px 6px',
+              background: permissionMode === 'auto-approve' ? 'rgba(245, 166, 35, 0.1)' : 'rgba(39, 174, 96, 0.1)',
+              border: `1px solid ${permissionMode === 'auto-approve' ? 'rgba(245, 166, 35, 0.3)' : 'rgba(39, 174, 96, 0.3)'}`,
+              borderRadius: '6px',
+              color: permissionMode === 'auto-approve' ? '#f5a623' : '#27ae60',
+              fontWeight: 500,
+            }}>
+              {permissionMode === 'auto-approve' ? 'Auto-approve' : 'Default perms'}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {availableModes.length > 1 && (
@@ -443,6 +457,47 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
                   </button>
                 )}
               </div>
+            </div>
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: '6px',
+              width: '100%', maxWidth: '420px',
+            }}>
+              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Tool permissions
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setPermissionMode('auto-approve')}
+                  style={{
+                    flex: 1, padding: '8px 12px', fontSize: '13px',
+                    background: permissionMode === 'auto-approve' ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-primary)',
+                    border: `1px solid ${permissionMode === 'auto-approve' ? 'rgba(99, 102, 241, 0.4)' : 'var(--border-default)'}`,
+                    borderRadius: '8px',
+                    color: permissionMode === 'auto-approve' ? 'rgb(99, 102, 241)' : 'var(--text-secondary)',
+                    cursor: 'pointer', fontWeight: permissionMode === 'auto-approve' ? 600 : 400,
+                  }}
+                >
+                  Auto-approve all
+                </button>
+                <button
+                  onClick={() => setPermissionMode('allowed-tools')}
+                  style={{
+                    flex: 1, padding: '8px 12px', fontSize: '13px',
+                    background: permissionMode === 'allowed-tools' ? 'rgba(245, 166, 35, 0.12)' : 'var(--bg-primary)',
+                    border: `1px solid ${permissionMode === 'allowed-tools' ? 'rgba(245, 166, 35, 0.4)' : 'var(--border-default)'}`,
+                    borderRadius: '8px',
+                    color: permissionMode === 'allowed-tools' ? 'rgb(245, 166, 35)' : 'var(--text-secondary)',
+                    cursor: 'pointer', fontWeight: permissionMode === 'allowed-tools' ? 600 : 400,
+                  }}
+                >
+                  Default permissions
+                </button>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', margin: 0 }}>
+                {permissionMode === 'auto-approve'
+                  ? 'All tool calls (file edits, commands, etc.) will be auto-approved.'
+                  : 'Uses Claude Code\'s default permission settings from your config.'}
+              </p>
             </div>
             <button onClick={handleConnect} disabled={!cwdInput.trim()} style={{
               padding: '10px 24px', fontSize: '14px', fontWeight: 500,
