@@ -7,66 +7,6 @@ mod window_commands;
 pub use commands::*;
 pub use workspace::*;
 
-use tauri::Manager;
-
-#[cfg(desktop)]
-fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-    use tauri::menu::{MenuBuilder, MenuItemBuilder};
-
-    let show = MenuItemBuilder::with_id("show", "Show Miku").build(app)?;
-    let new_window = MenuItemBuilder::with_id("new_window", "New Window").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-
-    let menu = MenuBuilder::new(app)
-        .item(&show)
-        .item(&new_window)
-        .separator()
-        .item(&quit)
-        .build()?;
-
-    TrayIconBuilder::new()
-        .icon(app.default_window_icon().cloned().unwrap())
-        .tooltip("Miku")
-        .menu(&menu)
-        .on_menu_event(move |app: &tauri::AppHandle, event| {
-            match event.id().as_ref() {
-                "show" => {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.unminimize();
-                        let _ = w.set_focus();
-                    }
-                }
-                "new_window" => {
-                    window_commands::create_new_window_inner(app);
-                }
-                "quit" => {
-                    app.exit(0);
-                }
-                _ => {}
-            }
-        })
-        .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let app = tray.app_handle();
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.unminimize();
-                    let _ = w.set_focus();
-                }
-            }
-        })
-        .build(app)?;
-
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -84,8 +24,63 @@ pub fn run() {
                 )?;
             }
 
-            #[cfg(desktop)]
-            setup_tray(app)?;
+            // System tray setup (only on desktop with tray-icon feature)
+            #[cfg(all(desktop, feature = "tray-icon"))]
+            {
+                use tauri::Manager;
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+                use tauri::menu::{MenuBuilder, MenuItemBuilder};
+
+                let show = MenuItemBuilder::with_id("show", "Show Miku").build(app)?;
+                let new_window = MenuItemBuilder::with_id("new_window", "New Window").build(app)?;
+                let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+                let menu = MenuBuilder::new(app)
+                    .item(&show)
+                    .item(&new_window)
+                    .separator()
+                    .item(&quit)
+                    .build()?;
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().cloned().unwrap())
+                    .tooltip("Miku")
+                    .menu(&menu)
+                    .on_menu_event(move |app_handle: &tauri::AppHandle, event| {
+                        match event.id().as_ref() {
+                            "show" => {
+                                if let Some(w) = app_handle.get_webview_window("main") {
+                                    let _ = w.show();
+                                    let _ = w.unminimize();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                            "new_window" => {
+                                window_commands::create_new_window_inner(app_handle);
+                            }
+                            "quit" => {
+                                app_handle.exit(0);
+                            }
+                            _ => {}
+                        }
+                    })
+                    .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app_handle = tray.app_handle();
+                            if let Some(w) = app_handle.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
 
             Ok(())
         })
