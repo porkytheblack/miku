@@ -357,13 +357,95 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
     // Also set up handler for remote commands
     relay.setHandlers({
-      onRemoteCommand: (prompt) => {
-        if (clientRef.current?.connected) {
-          clientRef.current.prompt(prompt);
-        }
+      onRemoteCommand: async (prompt) => {
+        if (!clientRef.current?.connected) return;
+
+        // Mirror the full handleSend flow so the host UI updates too
+        const userMsg: AgentChatMessage = {
+          id: generateMessageId(),
+          role: 'user',
+          content: prompt,
+          timestamp: new Date().toISOString(),
+        };
+
+        setStreamingContent('');
+        setStreamingThought('');
+        setActiveToolCalls(new Map());
+        setTasks([]);
+        setFileChanges(new Map());
+        streamContentRef.current = '';
+        streamThoughtRef.current = '';
+        streamToolCallsRef.current = new Map();
+        setError(null);
+
+        setMessages(prev => {
+          const newMessages = [...prev, userMsg];
+          setIsRunning(true);
+
+          // Run prompt asynchronously
+          (async () => {
+            try {
+              clientRef.current!.permissionMode = permissionMode;
+              clientRef.current!.model = selectedModel;
+              const { resultText } = await clientRef.current!.prompt(prompt);
+
+              setMessages(prevMsgs => {
+                const finalMessages: AgentChatMessage[] = [...prevMsgs];
+
+                if (streamThoughtRef.current) {
+                  finalMessages.push({
+                    id: generateMessageId(),
+                    role: 'thought',
+                    content: streamThoughtRef.current,
+                    timestamp: new Date().toISOString(),
+                  });
+                }
+
+                const content = streamContentRef.current || resultText || '';
+                const toolCalls = streamToolCallsRef.current.size > 0
+                  ? Array.from(streamToolCallsRef.current.values())
+                  : undefined;
+
+                finalMessages.push({
+                  id: generateMessageId(),
+                  role: 'assistant',
+                  content,
+                  timestamp: new Date().toISOString(),
+                  toolCalls,
+                });
+
+                queueMicrotask(() => persistDoc(finalMessages));
+
+                // Send final session state to remote guests
+                if (remoteState.connectedPeers.length > 0) {
+                  const agentMsgs = finalMessages.map(m => ({
+                    id: m.id,
+                    role: m.role as 'user' | 'assistant' | 'system',
+                    content: m.content,
+                    timestamp: m.timestamp,
+                  }));
+                  relay.sendSessionState(agentMsgs, []);
+                }
+
+                return finalMessages;
+              });
+            } catch (err) {
+              if ((err as Error).message !== 'cancelled') {
+                setError(err instanceof Error ? err.message : 'Unknown error');
+              }
+            } finally {
+              setIsRunning(false);
+              setStreamingContent('');
+              setStreamingThought('');
+              setActiveToolCalls(new Map());
+            }
+          })();
+
+          return newMessages;
+        });
       },
     });
-  }, [isRemoteHost, getAgentRelayHost, isConnected]);
+  }, [isRemoteHost, getAgentRelayHost, isConnected, permissionMode, selectedModel, persistDoc, remoteState.connectedPeers.length]);
 
   // Remote host: send full session state when a new peer connects
   useEffect(() => {
