@@ -93,6 +93,7 @@ interface StreamMessageEvent {
 }
 
 const CONNECT_TIMEOUT_MS = 10_000;
+const PROMPT_FIRST_OUTPUT_TIMEOUT_MS = 30_000; // max time to wait for first stdout
 
 // ============================================
 // Claude Client
@@ -194,13 +195,14 @@ export class AcpClient {
 
     const { Command } = await import('@tauri-apps/plugin-shell');
 
-    // Build args
-    const args = ['-p', text, '--output-format', 'stream-json'];
+    // Build args — flags BEFORE -p to avoid them being consumed as prompt text
+    const args = ['--output-format', 'stream-json'];
     if (this.sessionId) {
       args.push('--resume', this.sessionId);
     }
+    args.push('-p', text);
 
-    this.log(`Spawning claude prompt (session=${this.sessionId || 'new'})`);
+    this.log(`Spawning claude prompt (session=${this.sessionId || 'new'}, args=${JSON.stringify(args)})`);
 
     return new Promise<{ resultText: string }>((resolve, reject) => {
       let resultText = '';
@@ -209,6 +211,7 @@ export class AcpClient {
       const toolInputBuffers = new Map<number, { id: string; name: string; partialJson: string }>();
       let rejected = false;
       let gotStdout = false;
+      let firstOutputTimer: ReturnType<typeof setTimeout> | null = null;
 
       const command = Command.create(this.scopeName!, args, {
         cwd: this.cwd,
@@ -218,6 +221,7 @@ export class AcpClient {
       command.stdout.on('data', (data: Uint8Array) => {
         if (!gotStdout) {
           gotStdout = true;
+          if (firstOutputTimer) clearTimeout(firstOutputTimer);
           this.log(`First stdout chunk (${data.byteLength} bytes)`);
         }
         const chunk = new TextDecoder().decode(data);
@@ -258,6 +262,7 @@ export class AcpClient {
       });
 
       command.on('close', (data: { code: number | null }) => {
+        if (firstOutputTimer) clearTimeout(firstOutputTimer);
         // Process remaining buffer
         if (lineBuffer.trim()) {
           try {
@@ -288,9 +293,31 @@ export class AcpClient {
         reject(new Error(`Failed to run Claude: ${error}`));
       });
 
+      // Timeout if we never get any stdout (process might be stuck)
+      firstOutputTimer = setTimeout(() => {
+        if (!gotStdout && !rejected) {
+          const stderr = this.stderrBuffer.slice(-10).join('').trim();
+          this.log(`Timeout: no stdout after ${PROMPT_FIRST_OUTPUT_TIMEOUT_MS / 1000}s`);
+          rejected = true;
+          if (this.currentProcess) {
+            this.currentProcess.kill().catch(() => {});
+            this.currentProcess = null;
+          }
+          reject(new Error(
+            `Claude process produced no output after ${PROMPT_FIRST_OUTPUT_TIMEOUT_MS / 1000}s.\n` +
+            (stderr ? `stderr:\n${stderr}\n\n` : '') +
+            'This may indicate:\n' +
+            '- Claude Code needs authentication (run "claude" in your terminal first)\n' +
+            '- The working directory is inaccessible\n' +
+            '- Claude Code is stuck on an interactive prompt'
+          ));
+        }
+      }, PROMPT_FIRST_OUTPUT_TIMEOUT_MS);
+
       command.spawn().then((child: { kill: () => Promise<void> }) => {
         this.currentProcess = child;
       }).catch((err: Error) => {
+        if (firstOutputTimer) clearTimeout(firstOutputTimer);
         rejected = true;
         reject(new Error(`Could not start Claude Code.\n${err.message}`));
       });
