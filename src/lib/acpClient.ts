@@ -196,7 +196,7 @@ export class AcpClient {
 
     // Build args — flags BEFORE -p to avoid them being consumed as prompt text
     // Use stream-json for structured output with tool calls and thinking
-    const args = ['--output-format', 'stream-json'];
+    const args = ['--verbose', '--output-format', 'stream-json'];
     if (this.sessionId) {
       args.push('--resume', this.sessionId);
     }
