@@ -229,7 +229,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     } finally {
       setIsConnecting(false);
     }
-  }, [inTauri, cwdInput, permissionMode, workspace.currentWorkspace?.path, messages, persistDoc]);
+  }, [inTauri, cwdInput, permissionMode, selectedModel, workspace.currentWorkspace?.path, messages, persistDoc]);
 
   // Cleanup
   useEffect(() => {
@@ -368,6 +368,33 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           />
         </div>
         <div style={S.headerRight}>
+          {isConnected && (
+            <CwdBadge
+              cwd={cwdInput}
+              disabled={isRunning}
+              onChangeCwd={async (newCwd) => {
+                setCwdInput(newCwd);
+                persistDoc(messages, { cwd: newCwd });
+                // Reconnect with new cwd
+                clientRef.current?.disconnect();
+                setIsConnected(false);
+                setTimeout(() => handleConnect(), 100);
+              }}
+              onBrowse={inTauri ? async () => {
+                try {
+                  const { open } = await import('@tauri-apps/plugin-dialog');
+                  const selected = await open({ directory: true, title: 'Select working directory' });
+                  if (selected) {
+                    setCwdInput(selected as string);
+                    persistDoc(messages, { cwd: selected as string });
+                    clientRef.current?.disconnect();
+                    setIsConnected(false);
+                    setTimeout(() => handleConnect(), 100);
+                  }
+                } catch { /* cancelled */ }
+              } : undefined}
+            />
+          )}
           {isConnected && (
             <HeaderDropdown
               label={PERMISSION_OPTIONS.find(o => o.value === permissionMode)?.label || 'Mode'}
@@ -1538,6 +1565,100 @@ function StatusBadge({ connected, connecting }: { connected: boolean; connecting
       }} />
       {label}
     </span>
+  );
+}
+
+function CwdBadge({ cwd, disabled, onChangeCwd, onBrowse }: {
+  cwd: string;
+  disabled?: boolean;
+  onChangeCwd: (newCwd: string) => void;
+  onBrowse?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(cwd);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setValue(cwd);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [editing, cwd]);
+
+  const shortPath = cwd ? (cwd.split('/').pop() || cwd) : 'No directory';
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && value.trim()) {
+              setEditing(false);
+              if (value.trim() !== cwd) onChangeCwd(value.trim());
+            }
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          onBlur={() => setEditing(false)}
+          style={{
+            fontSize: '10px', padding: '2px 6px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--accent-primary)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-mono)',
+            width: '200px',
+            outline: 'none',
+          }}
+        />
+        {onBrowse && (
+          <button
+            onMouseDown={e => { e.preventDefault(); onBrowse(); setEditing(false); }}
+            style={{
+              fontSize: '10px', padding: '2px 6px',
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            ...
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => !disabled && setEditing(true)}
+      title={cwd || 'Click to set working directory'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '4px',
+        fontSize: '10px', padding: '2px 8px',
+        background: 'rgba(130, 130, 130, 0.08)',
+        border: '1px solid rgba(130, 130, 130, 0.25)',
+        borderRadius: 'var(--radius-full)',
+        color: 'var(--text-secondary)',
+        fontWeight: 500,
+        fontFamily: 'var(--font-mono)',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        whiteSpace: 'nowrap',
+        maxWidth: '150px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+      </svg>
+      {shortPath}
+    </button>
   );
 }
 
