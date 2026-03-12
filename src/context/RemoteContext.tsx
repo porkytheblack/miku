@@ -37,6 +37,7 @@ interface RemoteState {
   role: RemoteRole | null;
   roomCode: string | null;
   connectedPeers: RemotePeerInfo[];
+  syncStatus: 'idle' | 'syncing' | 'error';
   error?: string;
 }
 
@@ -76,6 +77,7 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
     role: null,
     roomCode: null,
     connectedPeers: [],
+    syncStatus: 'idle',
   });
 
   const peerRef = useRef<MikuPeer | null>(null);
@@ -92,14 +94,13 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
 
   const setupPeerHandlers = useCallback(
     (peer: MikuPeer, workspacePath: string, role: RemoteRole) => {
-      // Set up workspace manager
-      const wsManager = new RemoteWorkspaceManager(peer, workspacePath, peer['_status'] ?? 'unknown');
+      // Workspace manager is created with a placeholder peerId.
+      // The actual peerId is set after the peer connects (see startSharing/joinRoom).
+      const wsManager = new RemoteWorkspaceManager(peer, workspacePath, 'pending');
       wsManager.setHandlers({
         onRefreshFiles,
-        onSyncStatusChange: (status) => {
-          if (status === 'syncing') {
-            setRemote(prev => ({ ...prev, status: 'connected' }));
-          }
+        onSyncStatusChange: (syncStatus) => {
+          setRemote(prev => ({ ...prev, syncStatus }));
         },
       });
       workspaceManagerRef.current = wsManager;
@@ -165,11 +166,17 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
 
       const roomCode = await peer.createRoom();
 
+      // Update the FileSyncManager with the actual peerId now that the peer is connected
+      if (workspaceManagerRef.current && peer.peerId) {
+        workspaceManagerRef.current.getFileSync().setPeerId(peer.peerId);
+      }
+
       setRemote({
         status: 'connected',
         role: 'host',
         roomCode,
         connectedPeers: [],
+        syncStatus: 'idle',
       });
 
       // Save to localStorage for reconnect hints
@@ -200,11 +207,17 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
 
       await peer.joinRoom(code);
 
+      // Update the FileSyncManager with the actual peerId now that the peer is connected
+      if (workspaceManagerRef.current && peer.peerId) {
+        workspaceManagerRef.current.getFileSync().setPeerId(peer.peerId);
+      }
+
       setRemote({
         status: 'connected',
         role: 'guest',
         roomCode: code.toUpperCase(),
         connectedPeers: peer.connectedPeers,
+        syncStatus: 'idle',
       });
 
       try {
@@ -241,6 +254,7 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
       role: null,
       roomCode: null,
       connectedPeers: [],
+      syncStatus: 'idle',
     });
 
     try {

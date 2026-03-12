@@ -215,16 +215,12 @@ pub async fn create_file(base_path: String, name: String) -> Result<String, Miku
     Ok(file_path.to_string_lossy().to_string())
 }
 
-/// Create a new folder
+/// Create a new folder (creates parent directories as needed, idempotent)
 #[tauri::command]
 pub async fn create_folder(base_path: String, name: String) -> Result<String, MikuError> {
     let folder_path = Path::new(&base_path).join(&name);
 
-    if folder_path.exists() {
-        return Err(MikuError::Path("Folder already exists".to_string()));
-    }
-
-    tokio::fs::create_dir(&folder_path).await?;
+    tokio::fs::create_dir_all(&folder_path).await?;
 
     Ok(folder_path.to_string_lossy().to_string())
 }

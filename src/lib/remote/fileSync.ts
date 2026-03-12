@@ -43,6 +43,11 @@ export class FileSyncManager {
     this.handlers = handlers;
   }
 
+  /** Update the peerId (used for LWW tie-breaking). Called after peer connection is established. */
+  setPeerId(peerId: string): void {
+    this.peerId = peerId;
+  }
+
   /**
    * Start the file sync process. Called after peer connection is established.
    * 1. Build local manifest
@@ -369,20 +374,17 @@ export class FileSyncManager {
   private async writeFile(relativePath: string, content: string): Promise<void> {
     const fullPath = `${this.workspacePath}/${relativePath}`;
 
-    // Ensure parent directory exists
-    const parentDir = fullPath.substring(0, fullPath.lastIndexOf('/'));
-
     if (isTauri()) {
       const { invoke } = await import('@tauri-apps/api/core');
 
-      // Try to create parent directory (ignore if exists)
-      try {
+      // Ensure parent directory exists (only if the file is in a subdirectory)
+      const lastSlash = relativePath.lastIndexOf('/');
+      if (lastSlash > 0) {
+        const parentDir = relativePath.substring(0, lastSlash);
         await invoke('create_folder', {
           basePath: this.workspacePath,
-          name: relativePath.substring(0, relativePath.lastIndexOf('/')),
+          name: parentDir,
         });
-      } catch {
-        // Directory may already exist
       }
 
       await invoke('save_file', { path: fullPath, content });

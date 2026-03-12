@@ -7,7 +7,6 @@
 
 import { MikuPeer } from './peer';
 import { FileSyncManager, type FileSyncHandlers } from './fileSync';
-import type { FileSyncMessage } from './types';
 
 export interface RemoteWorkspaceHandlers extends FileSyncHandlers {
   /** Called when workspace file list should be refreshed */
@@ -42,18 +41,12 @@ export class RemoteWorkspaceManager {
 
   /**
    * Start the remote workspace sync.
+   * Note: File sync message routing is handled by RemoteContext's peer handlers.
+   * We do NOT call peer.setHandlers() here to avoid clobbering existing handlers.
    */
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-
-    // Wire up the peer's file sync messages to our file sync manager
-    this.peer.setHandlers({
-      ...this.peer['handlers'], // Preserve existing handlers
-      onFileSyncMessage: (message: FileSyncMessage) => {
-        this.fileSync.handleMessage(message);
-      },
-    });
 
     await this.fileSync.start();
   }

@@ -82,6 +82,10 @@ export class MikuPeer {
     return this._status;
   }
 
+  get peerId(): string | null {
+    return this.peer?.id ?? null;
+  }
+
   get connectedPeers(): RemotePeerInfo[] {
     const peers: RemotePeerInfo[] = [];
     for (const [id, conn] of this.connections) {
@@ -242,7 +246,7 @@ export class MikuPeer {
   private setupConnection(conn: DataConnection): void {
     const peerId = conn.peer;
 
-    conn.on('open', () => {
+    const onOpen = () => {
       this.connections.set(peerId, conn);
       this.startHeartbeat(peerId);
       this.handlers.onPeerConnected?.({
@@ -250,7 +254,15 @@ export class MikuPeer {
         role: this._role === 'host' ? 'guest' : 'host',
         connectedAt: new Date().toISOString(),
       });
-    });
+    };
+
+    // PeerJS can deliver connections that are already open.
+    // If so, the 'open' event will never fire, so handle it immediately.
+    if (conn.open) {
+      onOpen();
+    } else {
+      conn.on('open', onOpen);
+    }
 
     conn.on('data', (rawData) => {
       try {
