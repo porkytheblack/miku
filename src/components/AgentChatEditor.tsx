@@ -560,11 +560,28 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         {/* Thinking indicator */}
         {isRunning && !streamingContent && activeToolCalls.size === 0 && !streamingThought && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
+            display: 'flex', flexDirection: 'column', gap: '8px',
             padding: '10px 14px', color: 'var(--text-tertiary)', fontSize: '13px',
           }}>
-            <Spinner />
-            <span>{agentName} is thinking...</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Spinner />
+              <span>{agentName} is thinking...</span>
+            </div>
+            {stderrLog && (
+              <details style={{ marginTop: '2px' }}>
+                <summary style={{ fontSize: '11px', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
+                  Process output
+                </summary>
+                <pre style={{
+                  margin: '4px 0 0', padding: '6px 8px', background: 'var(--bg-tertiary)',
+                  borderRadius: '4px', fontSize: '10px', lineHeight: '1.4',
+                  overflow: 'auto', maxHeight: '150px',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {stderrLog}
+                </pre>
+              </details>
+            )}
           </div>
         )}
 

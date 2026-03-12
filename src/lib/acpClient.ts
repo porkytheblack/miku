@@ -208,6 +208,7 @@ export class AcpClient {
       const toolCallMap = new Map<string, AcpToolCallInfo>();
       const toolInputBuffers = new Map<number, { id: string; name: string; partialJson: string }>();
       let rejected = false;
+      let gotStdout = false;
 
       const command = Command.create(this.scopeName!, args, {
         cwd: this.cwd,
@@ -215,6 +216,10 @@ export class AcpClient {
       });
 
       command.stdout.on('data', (data: Uint8Array) => {
+        if (!gotStdout) {
+          gotStdout = true;
+          this.log(`First stdout chunk (${data.byteLength} bytes)`);
+        }
         const chunk = new TextDecoder().decode(data);
         lineBuffer += chunk;
 
