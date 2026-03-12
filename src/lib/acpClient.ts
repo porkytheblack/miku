@@ -204,6 +204,36 @@ export class AcpClient {
 
     this.log(`Spawning claude prompt (session=${this.sessionId || 'new'}, args=${JSON.stringify(args)})`);
 
+    // Quick diagnostic: run a simple execute() to check if claude -p works at all
+    // This helps distinguish "process hangs" from "spawn events not firing"
+    if (!this.sessionId) {
+      try {
+        this.log('Running diagnostic: claude -p "hi" --output-format json (via execute)...');
+        const diagResult = await this.withTimeout(
+          () => Command.create(this.scopeName!, ['--output-format', 'json', '-p', 'hi'], { cwd: this.cwd }).execute(),
+          15_000,
+          'Diagnostic timed out after 15s',
+        );
+        this.log(`Diagnostic result: code=${diagResult.code}, stdout=${diagResult.stdout.length} chars, stderr=${diagResult.stderr.slice(0, 200)}`);
+        if (diagResult.stdout) {
+          this.log(`Diagnostic stdout preview: ${diagResult.stdout.slice(0, 300)}`);
+        }
+        // Extract session ID from diagnostic if available
+        if (diagResult.stdout) {
+          try {
+            const parsed = JSON.parse(diagResult.stdout);
+            if (parsed.session_id) {
+              this.sessionId = parsed.session_id;
+              this.log(`Got session from diagnostic: ${this.sessionId}`);
+            }
+          } catch { /* not json or no session */ }
+        }
+      } catch (err) {
+        this.log(`Diagnostic failed: ${err instanceof Error ? err.message : String(err)}`);
+        // Don't fail — continue to the actual prompt attempt
+      }
+    }
+
     return new Promise<{ resultText: string }>((resolve, reject) => {
       let resultText = '';
       let lineBuffer = '';
@@ -215,17 +245,15 @@ export class AcpClient {
 
       const command = Command.create(this.scopeName!, args, {
         cwd: this.cwd,
-        encoding: 'raw',
       });
 
-      command.stdout.on('data', (data: Uint8Array) => {
+      command.stdout.on('data', (data: string) => {
         if (!gotStdout) {
           gotStdout = true;
           if (firstOutputTimer) clearTimeout(firstOutputTimer);
-          this.log(`First stdout chunk (${data.byteLength} bytes)`);
+          this.log(`First stdout chunk (${data.length} chars)`);
         }
-        const chunk = new TextDecoder().decode(data);
-        lineBuffer += chunk;
+        lineBuffer += data;
 
         // Split on newlines — each line is a JSON event
         const lines = lineBuffer.split('\n');
@@ -255,10 +283,9 @@ export class AcpClient {
         }
       });
 
-      command.stderr.on('data', (data: Uint8Array) => {
-        const text = new TextDecoder().decode(data);
-        this.stderrBuffer.push(text);
-        this.onStderr?.(text);
+      command.stderr.on('data', (data: string) => {
+        this.stderrBuffer.push(data);
+        this.onStderr?.(data);
       });
 
       command.on('close', (data: { code: number | null }) => {
