@@ -212,49 +212,28 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     try {
       const { resultText } = await clientRef.current.prompt(text);
 
-      // Build assistant message from accumulated streaming content
-      // Use functional state reads to get latest values
-      setStreamingContent(prev => {
-        setStreamingThought(thought => {
-          setActiveToolCalls(toolCalls => {
-            const content = prev || resultText || '';
-            const assistantMsg: AgentChatMessage = {
-              id: generateMessageId(),
-              role: 'assistant',
-              content,
-              timestamp: new Date().toISOString(),
-              toolCalls: toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined,
-            };
+      // Build assistant message from the result
+      const assistantMsg: AgentChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: resultText || '',
+        timestamp: new Date().toISOString(),
+      };
 
-            const finalMessages: AgentChatMessage[] = [...newMessages];
-
-            if (thought) {
-              finalMessages.push({
-                id: generateMessageId(),
-                role: 'thought',
-                content: thought,
-                timestamp: new Date().toISOString(),
-              });
-            }
-
-            finalMessages.push(assistantMsg);
-            setMessages(finalMessages);
-            persistDoc(finalMessages);
-            return new Map();
-          });
-          return '';
-        });
-        return '';
-      });
+      const finalMessages = [...newMessages, assistantMsg];
+      setMessages(finalMessages);
+      // Defer persistDoc to avoid setState-during-render
+      queueMicrotask(() => persistDoc(finalMessages));
     } catch (err) {
       if ((err as Error).message !== 'cancelled') {
         setError(err instanceof Error ? err.message : 'Unknown error');
       }
-      persistDoc(newMessages);
+      queueMicrotask(() => persistDoc(newMessages));
     } finally {
       setIsRunning(false);
       setStreamingContent('');
       setStreamingThought('');
+      setActiveToolCalls(new Map());
     }
   }, [input, isRunning, messages, persistDoc]);
 
