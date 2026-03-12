@@ -49,6 +49,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [agentName, setAgentName] = useState(doc.agentConfig.agentName || 'Claude Code');
   const [availableModes, setAvailableModes] = useState<Array<{ id: string; name: string }>>([]);
   const [currentMode, setCurrentMode] = useState<string | null>(null);
+  const [cwdInput, setCwdInput] = useState(doc.agentConfig.cwd || workspace.currentWorkspace?.path || '');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -164,7 +165,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         setIsRunning(false);
       };
 
-      const cwd = doc.agentConfig.cwd || workspace.currentWorkspace?.path || '.';
+      const cwd = cwdInput.trim() || workspace.currentWorkspace?.path || '.';
       await client.connect(cwd);
 
       clientRef.current = client;
@@ -183,7 +184,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     } finally {
       setIsConnecting(false);
     }
-  }, [inTauri, doc.agentConfig.cwd, workspace.currentWorkspace?.path]);
+  }, [inTauri, cwdInput, workspace.currentWorkspace?.path]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -402,10 +403,57 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             <p style={{ fontSize: '13px', textAlign: 'center', maxWidth: '360px' }}>
               Connect to Claude Code running on your device. Uses your existing Claude Code login - no separate authentication needed.
             </p>
-            <button onClick={handleConnect} style={{
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: '6px',
+              width: '100%', maxWidth: '420px',
+            }}>
+              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Working directory
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  value={cwdInput}
+                  onChange={(e) => setCwdInput(e.target.value)}
+                  placeholder="/path/to/project"
+                  style={{
+                    flex: 1, padding: '8px 12px', fontSize: '13px',
+                    background: 'var(--bg-primary)', border: '1px solid var(--border-default)',
+                    borderRadius: '8px', color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)', outline: 'none',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--border-active, var(--text-accent))'; }}
+                  onBlur={(e) => { e.target.style.borderColor = 'var(--border-default)'; }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+                />
+                {inTauri && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { open } = await import('@tauri-apps/plugin-dialog');
+                        const selected = await open({ directory: true, title: 'Select working directory' });
+                        if (selected) setCwdInput(selected as string);
+                      } catch { /* user cancelled */ }
+                    }}
+                    style={{
+                      padding: '8px 12px', background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-default)', borderRadius: '8px',
+                      color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px',
+                      flexShrink: 0,
+                    }}
+                    title="Browse..."
+                  >
+                    Browse
+                  </button>
+                )}
+              </div>
+            </div>
+            <button onClick={handleConnect} disabled={!cwdInput.trim()} style={{
               padding: '10px 24px', fontSize: '14px', fontWeight: 500,
-              background: 'var(--text-accent)', border: 'none', borderRadius: '8px',
-              color: 'white', cursor: 'pointer',
+              background: cwdInput.trim() ? 'var(--text-accent)' : 'var(--bg-tertiary)',
+              border: 'none', borderRadius: '8px',
+              color: cwdInput.trim() ? 'white' : 'var(--text-tertiary)',
+              cursor: cwdInput.trim() ? 'pointer' : 'default',
             }}>
               Connect to Claude Code
             </button>
@@ -547,7 +595,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
       {/* Input */}
       <div style={{
-        padding: '12px 20px 16px', borderTop: '1px solid var(--border-default)',
+        padding: '12px 20px 80px', borderTop: '1px solid var(--border-default)',
         background: 'var(--bg-secondary)', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
