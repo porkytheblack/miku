@@ -66,7 +66,11 @@ interface AgentChatEditorProps {
 // ============================================
 export default function AgentChatEditor({ initialContent, onContentChange }: AgentChatEditorProps) {
   const { workspace } = useWorkspace();
-  const { isActive: isRemoteActive, remote: remoteState } = useRemote();
+  const { isActive: isRemoteActive, remote: remoteState, getAgentRelayRemote, getAgentRelayHost } = useRemote();
+
+  // Remote guest mode: this chat is a relay viewer, not a local ACP session
+  const isRemoteGuest = isRemoteActive && remoteState.role === 'guest';
+  const isRemoteHost = isRemoteActive && remoteState.role === 'host';
 
   const [doc, setDoc] = useState<AgentChatDocument>(() => {
     if (initialContent) {
@@ -80,13 +84,13 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(isRemoteGuest); // Guest starts "connected" via relay
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingThought, setStreamingThought] = useState('');
   const [activeToolCalls, setActiveToolCalls] = useState<Map<string, AcpToolCallInfo>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [stderrLog, setStderrLog] = useState('');
-  const [agentName, setAgentName] = useState(doc.agentConfig.agentName || 'Claude Code');
+  const [agentName, setAgentName] = useState(isRemoteGuest ? 'Claude Code (Remote)' : (doc.agentConfig.agentName || 'Claude Code'));
   const [cwdInput, setCwdInput] = useState(doc.agentConfig.cwd || workspace.currentWorkspace?.path || '');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto-approve');
   const [selectedModel, setSelectedModel] = useState('');
@@ -238,10 +242,134 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     return () => { clientRef.current?.disconnect(); };
   }, []);
 
+  // Remote guest: wire up agent relay to receive events from host
+  useEffect(() => {
+    if (!isRemoteGuest) return;
+    const relay = getAgentRelayRemote();
+    if (!relay) return;
+
+    relay.setHandlers({
+      onAgentEvent: (update: AcpSessionUpdate) => {
+        // Process session updates the same way as local AcpClient
+        switch (update.type) {
+          case 'agent_message_chunk':
+            if (update.text) {
+              streamContentRef.current += update.text;
+              setStreamingContent(prev => prev + update.text);
+            }
+            break;
+          case 'agent_thought_chunk':
+            if (update.text) {
+              streamThoughtRef.current += update.text;
+              setStreamingThought(prev => prev + update.text);
+            }
+            break;
+          case 'tool_call':
+            if (update.toolCall) {
+              streamToolCallsRef.current.set(update.toolCall.toolCallId, update.toolCall);
+              setActiveToolCalls(prev => {
+                const next = new Map(prev);
+                next.set(update.toolCall!.toolCallId, update.toolCall!);
+                return next;
+              });
+            }
+            break;
+          case 'tool_call_update':
+            if (update.toolCall) {
+              const merged = { ...streamToolCallsRef.current.get(update.toolCall.toolCallId), ...update.toolCall };
+              streamToolCallsRef.current.set(update.toolCall.toolCallId, merged);
+              setActiveToolCalls(prev => {
+                const next = new Map(prev);
+                const ex = next.get(update.toolCall!.toolCallId);
+                next.set(update.toolCall!.toolCallId, { ...ex, ...update.toolCall! });
+                return next;
+              });
+              if (merged.title === 'TodoWrite' && merged.rawInput) {
+                const inp = merged.rawInput as { todos?: TaskItem[] };
+                if (inp.todos && Array.isArray(inp.todos)) setTasks(inp.todos);
+              }
+            }
+            break;
+        }
+      },
+      onAgentStatus: (status, connectionStatus) => {
+        setIsRunning(status === 'thinking' || status === 'working');
+        setIsConnected(connectionStatus === 'connected');
+      },
+      onSessionState: (conversation) => {
+        // Populate full chat history from host
+        const chatMessages: AgentChatMessage[] = conversation.map(msg => ({
+          id: generateMessageId(),
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          timestamp: msg.timestamp ?? new Date().toISOString(),
+        }));
+        setMessages(chatMessages);
+        setIsConnected(true);
+      },
+      onPermissionRequest: (request) => {
+        const permId = request.toolCall?.toolCallId ?? generateMessageId();
+        setPendingPermission({
+          id: permId,
+          toolCall: {
+            toolCallId: permId,
+            title: request.toolCall?.title ?? 'Tool',
+            status: 'in_progress',
+          },
+          resolve: (approved) => {
+            relay.respondToApproval(permId, approved);
+            setPendingPermission(null);
+          },
+        });
+      },
+    });
+  }, [isRemoteGuest, getAgentRelayRemote]);
+
+  // Remote host: forward ACP session updates to connected remotes
+  useEffect(() => {
+    if (!isRemoteHost || !clientRef.current) return;
+    const relay = getAgentRelayHost();
+    if (!relay) return;
+
+    const originalHandler = clientRef.current.onSessionUpdate;
+    clientRef.current.onSessionUpdate = (update: AcpSessionUpdate) => {
+      originalHandler?.(update);
+      relay.relaySessionUpdate(update);
+    };
+
+    // Also set up handler for remote commands
+    relay.setHandlers({
+      onRemoteCommand: (prompt) => {
+        if (clientRef.current?.connected) {
+          clientRef.current.prompt(prompt);
+        }
+      },
+    });
+  }, [isRemoteHost, getAgentRelayHost, isConnected]);
+
   // Send prompt
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || isRunning || !clientRef.current?.connected) return;
+    if (!text || isRunning) return;
+
+    // Remote guest: send command to host via relay
+    if (isRemoteGuest) {
+      const relay = getAgentRelayRemote();
+      if (!relay) return;
+      setInput('');
+
+      const userMsg: AgentChatMessage = {
+        id: generateMessageId(),
+        role: 'user',
+        content: text,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+      relay.sendCommand(text);
+      return;
+    }
+
+    if (!clientRef.current?.connected) return;
 
     setInput('');
     setError(null);
@@ -382,7 +510,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           )}
         </div>
         <div style={S.headerRight}>
-          {isConnected && (
+          {isConnected && !isRemoteGuest && (
             <CwdBadge
               cwd={cwdInput}
               disabled={isRunning}
@@ -409,7 +537,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
               } : undefined}
             />
           )}
-          {isConnected && (
+          {isConnected && !isRemoteGuest && (
             <HeaderDropdown
               label={PERMISSION_OPTIONS.find(o => o.value === permissionMode)?.label || 'Mode'}
               color={PERMISSION_OPTIONS.find(o => o.value === permissionMode)?.color || 'var(--text-secondary)'}
@@ -427,7 +555,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
               ))}
             </HeaderDropdown>
           )}
-          {isConnected && (
+          {isConnected && !isRemoteGuest && (
             <HeaderDropdown
               label={MODEL_OPTIONS.find(o => o.value === selectedModel)?.label || 'Default'}
               color="var(--text-secondary)"
@@ -445,7 +573,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
               ))}
             </HeaderDropdown>
           )}
-          {!isConnected && !isConnecting && (
+          {!isConnected && !isConnecting && !isRemoteGuest && (
             <Button variant="primary" size="sm" onClick={handleConnect}>
               Reconnect
             </Button>
@@ -476,8 +604,8 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
       {/* Messages area */}
       <div style={S.messagesArea}>
-        {/* Connect screen */}
-        {messages.length === 0 && !isConnected && !isConnecting && (
+        {/* Connect screen — skipped for remote guests */}
+        {messages.length === 0 && !isConnected && !isConnecting && !isRemoteGuest && (
           <ConnectScreen
             cwdInput={cwdInput}
             onCwdChange={setCwdInput}
@@ -496,8 +624,12 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         {messages.length === 0 && !isRunning && isConnected && (
           <div style={S.centeredContainer}>
             <ChatIcon size={48} color="var(--text-tertiary)" opacity={0.4} />
-            <p style={S.emptyTitle}>Connected to {agentName}</p>
-            <p style={S.emptySubtitle}>Type a message below to start working.</p>
+            <p style={S.emptyTitle}>{isRemoteGuest ? 'Connected to Remote Agent' : `Connected to ${agentName}`}</p>
+            <p style={S.emptySubtitle}>
+              {isRemoteGuest
+                ? 'Viewing the host\'s agent session. You can send commands below.'
+                : 'Type a message below to start working.'}
+            </p>
           </div>
         )}
 

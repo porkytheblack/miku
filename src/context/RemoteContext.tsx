@@ -5,6 +5,11 @@
  *
  * Orchestrates the Miku Remote system: peer connections, file sync, and agent relay.
  * Coordinates between WorkspaceContext and AgentEditorContext.
+ *
+ * Key behaviors:
+ * - Guest joining auto-creates a remote workspace directory
+ * - Agent relay events are tracked and exposed for UI rendering
+ * - Session state from host auto-opens an agent chat on the guest
  */
 
 import {
@@ -19,6 +24,8 @@ import {
 import { MikuPeer } from '@/lib/remote/peer';
 import { RemoteWorkspaceManager } from '@/lib/remote/remoteWorkspace';
 import { AgentRelayHost, AgentRelayRemote } from '@/lib/remote/agentRelay';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { isTauri } from '@/lib/tauri';
 import type {
   RemoteConnectionStatus,
   RemoteRole,
@@ -26,7 +33,10 @@ import type {
   AgentRelayMessage,
   FileSyncMessage,
 } from '@/lib/remote/types';
-import { DEFAULT_REMOTE_STATE } from '@/lib/remote/types';
+import type {
+  AgentActivityStatus,
+  AgentConnectionStatus,
+} from '@/types/agent';
 
 // ============================================
 // Context Types
@@ -38,6 +48,10 @@ interface RemoteState {
   roomCode: string | null;
   connectedPeers: RemotePeerInfo[];
   syncStatus: 'idle' | 'syncing' | 'error';
+  agentStatus: AgentActivityStatus | null;
+  agentConnectionStatus: AgentConnectionStatus | null;
+  /** Path to an agent chat file that should be auto-opened (set when session state arrives) */
+  pendingAgentChatPath: string | null;
   error?: string;
 }
 
@@ -45,8 +59,8 @@ interface RemoteContextType {
   remote: RemoteState;
   /** Create a room as host and start sharing the workspace */
   startSharing: (workspacePath: string) => Promise<string>;
-  /** Join a room by code as guest */
-  joinRoom: (code: string, workspacePath: string) => Promise<void>;
+  /** Join a room by code as guest (auto-creates remote workspace) */
+  joinRoom: (code: string) => Promise<void>;
   /** Disconnect from the remote session */
   disconnect: () => Promise<void>;
   /** Whether remote is currently active */
@@ -55,6 +69,8 @@ interface RemoteContextType {
   getAgentRelayHost: () => AgentRelayHost | null;
   /** Get the agent relay remote (for wiring into agent context) */
   getAgentRelayRemote: () => AgentRelayRemote | null;
+  /** Clear the pending agent chat path after it has been opened */
+  clearPendingAgentChat: () => void;
 }
 
 const RemoteContext = createContext<RemoteContextType | undefined>(undefined);
@@ -65,19 +81,20 @@ const RemoteContext = createContext<RemoteContextType | undefined>(undefined);
 
 interface RemoteProviderProps {
   children: ReactNode;
-  /** Callback to refresh workspace files after remote sync changes */
-  onRefreshFiles?: () => void;
-  /** Callback to dispatch remote agent events */
-  onRemoteAgentEvent?: (event: AgentRelayMessage) => void;
 }
 
-export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }: RemoteProviderProps) {
+export function RemoteProvider({ children }: RemoteProviderProps) {
+  const { openRemoteWorkspace, refreshFiles } = useWorkspace();
+
   const [remote, setRemote] = useState<RemoteState>({
     status: 'disconnected',
     role: null,
     roomCode: null,
     connectedPeers: [],
     syncStatus: 'idle',
+    agentStatus: null,
+    agentConnectionStatus: null,
+    pendingAgentChatPath: null,
   });
 
   const peerRef = useRef<MikuPeer | null>(null);
@@ -98,7 +115,7 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
       // The actual peerId is set after the peer connects (see startSharing/joinRoom).
       const wsManager = new RemoteWorkspaceManager(peer, workspacePath, 'pending');
       wsManager.setHandlers({
-        onRefreshFiles,
+        onRefreshFiles: refreshFiles,
         onSyncStatusChange: (syncStatus) => {
           setRemote(prev => ({ ...prev, syncStatus }));
         },
@@ -112,6 +129,32 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
         agentRelayRemoteRef.current = null;
       } else {
         const relay = new AgentRelayRemote(peer);
+        // Track agent status from host on the guest side
+        relay.setHandlers({
+          onAgentStatus: (status, connectionStatus) => {
+            setRemote(prev => ({
+              ...prev,
+              agentStatus: status,
+              agentConnectionStatus: connectionStatus,
+            }));
+          },
+          onSessionState: async (_conversation, _tasks) => {
+            // Auto-create a .miku-chat file in the remote workspace and signal it should be opened
+            if (!workspacePath) return;
+            try {
+              const chatFileName = 'remote-agent.miku-chat';
+              const chatPath = `${workspacePath}/${chatFileName}`;
+              if (isTauri()) {
+                const { invoke } = await import('@tauri-apps/api/core');
+                // Create the file (save_file creates or overwrites)
+                await invoke('save_file', { path: chatPath, content: '' });
+              }
+              setRemote(prev => ({ ...prev, pendingAgentChatPath: chatPath }));
+            } catch (err) {
+              console.error('Failed to auto-create agent chat file:', err);
+            }
+          },
+        });
         agentRelayRemoteRef.current = relay;
         agentRelayHostRef.current = null;
       }
@@ -145,12 +188,10 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
           } else if (role === 'guest' && agentRelayRemoteRef.current) {
             agentRelayRemoteRef.current.handleMessage(message);
           }
-          // Forward to parent for agent context integration
-          onRemoteAgentEvent?.(message);
         },
       });
     },
-    [onRefreshFiles, onRemoteAgentEvent],
+    [refreshFiles],
   );
 
   const startSharing = useCallback(
@@ -177,9 +218,11 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
         roomCode,
         connectedPeers: [],
         syncStatus: 'idle',
+        agentStatus: null,
+        agentConnectionStatus: null,
+        pendingAgentChatPath: null,
       });
 
-      // Save to localStorage for reconnect hints
       try {
         localStorage.setItem(
           'miku-remote-last',
@@ -195,9 +238,18 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
   );
 
   const joinRoom = useCallback(
-    async (code: string, workspacePath: string): Promise<void> => {
+    async (code: string): Promise<void> => {
       if (peerRef.current) {
         await peerRef.current.disconnect();
+      }
+
+      const upperCode = code.toUpperCase();
+
+      // Auto-create a persistent remote workspace directory
+      let workspacePath = '';
+      if (isTauri()) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        workspacePath = await invoke<string>('create_remote_workspace', { roomCode: upperCode });
       }
 
       const peer = new MikuPeer();
@@ -212,12 +264,25 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
         workspaceManagerRef.current.getFileSync().setPeerId(peer.peerId);
       }
 
+      // Open the remote workspace in WorkspaceContext
+      if (workspacePath) {
+        await openRemoteWorkspace(workspacePath, {
+          peerId: peer.peerId ?? '',
+          roomCode: upperCode,
+          role: 'guest',
+          status: 'connected',
+        });
+      }
+
       setRemote({
         status: 'connected',
         role: 'guest',
-        roomCode: code.toUpperCase(),
+        roomCode: upperCode,
         connectedPeers: peer.connectedPeers,
         syncStatus: 'idle',
+        agentStatus: null,
+        agentConnectionStatus: null,
+        pendingAgentChatPath: null,
       });
 
       try {
@@ -229,7 +294,7 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
         // localStorage may not be available
       }
     },
-    [setupPeerHandlers],
+    [setupPeerHandlers, openRemoteWorkspace],
   );
 
   const disconnect = useCallback(async () => {
@@ -255,6 +320,9 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
       roomCode: null,
       connectedPeers: [],
       syncStatus: 'idle',
+      agentStatus: null,
+      agentConnectionStatus: null,
+      pendingAgentChatPath: null,
     });
 
     try {
@@ -266,6 +334,9 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
 
   const getAgentRelayHost = useCallback(() => agentRelayHostRef.current, []);
   const getAgentRelayRemote = useCallback(() => agentRelayRemoteRef.current, []);
+  const clearPendingAgentChat = useCallback(() => {
+    setRemote(prev => ({ ...prev, pendingAgentChatPath: null }));
+  }, []);
 
   const value: RemoteContextType = {
     remote,
@@ -275,6 +346,7 @@ export function RemoteProvider({ children, onRefreshFiles, onRemoteAgentEvent }:
     isActive: remote.status === 'connected',
     getAgentRelayHost,
     getAgentRelayRemote,
+    clearPendingAgentChat,
   };
 
   return (

@@ -262,6 +262,18 @@ pub async fn list_env_files(workspace_path: String) -> Result<Vec<WorkspaceFile>
     Ok(env_files)
 }
 
+/// Create a persistent remote workspace directory under app data
+#[tauri::command]
+pub async fn create_remote_workspace(room_code: String) -> Result<String, MikuError> {
+    let data_dir = dirs::data_dir()
+        .ok_or_else(|| MikuError::Path("Could not determine app data directory".to_string()))?;
+    let remote_ws_path = data_dir.join("miku").join("remote-workspaces").join(&room_code);
+
+    tokio::fs::create_dir_all(&remote_ws_path).await?;
+
+    Ok(remote_ws_path.to_string_lossy().to_string())
+}
+
 /// Delete a file or folder
 #[tauri::command]
 pub async fn delete_file(path: String) -> Result<(), MikuError> {

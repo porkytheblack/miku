@@ -110,6 +110,7 @@ pub fn run() {
             workspace::create_folder,
             workspace::delete_file,
             workspace::rename_file,
+            workspace::create_remote_workspace,
             // Claude commands
             claude::claude_prompt,
             claude::claude_cancel,

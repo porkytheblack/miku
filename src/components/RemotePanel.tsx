@@ -10,6 +10,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRemote } from '@/context/RemoteContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { isTauri } from '@/lib/tauri';
 
 // ============================================
 // Styles
@@ -320,19 +321,22 @@ export function RemotePanel({ isOpen, onClose }: RemotePanelProps) {
 
   const handleJoinRoom = useCallback(async () => {
     if (!joinCode.trim()) return;
+    if (!isTauri()) {
+      setError('Joining remote workspaces requires the Miku desktop app.');
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
-      // Guest can join without a workspace — they'll view the host's workspace
-      const path = workspace.currentWorkspace?.path ?? '';
-      await joinRoom(joinCode.trim(), path);
+      await joinRoom(joinCode.trim());
       showToast('Connected to remote workspace', 'success');
+      onClose(); // Auto-close the panel after successful join
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
     } finally {
       setIsLoading(false);
     }
-  }, [joinRoom, joinCode, workspace.currentWorkspace, showToast]);
+  }, [joinRoom, joinCode, showToast, onClose]);
 
   const handleDisconnect = useCallback(async () => {
     setIsLoading(true);
@@ -554,6 +558,13 @@ export function RemotePanel({ isOpen, onClose }: RemotePanelProps) {
               {/* Join Section */}
               <div style={S.section}>
                 <div style={S.sectionTitle}>Join a remote workspace</div>
+                <div style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary, #888)',
+                  marginBottom: '8px',
+                }}>
+                  A remote workspace will be created automatically.
+                </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     type="text"

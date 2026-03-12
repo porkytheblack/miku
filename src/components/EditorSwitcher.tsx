@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDocument } from '@/context/DocumentContext';
 import { useMiku } from '@/context/MikuContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { useRemote } from '@/context/RemoteContext';
 import { detectFileType } from '@/lib/fileTypes';
 import BlockEditor from './BlockEditor';
 import EnvEditor from './EnvEditor';
@@ -10,6 +12,7 @@ import KanbanEditor from './KanbanEditor';
 import DocsEditor from './DocsEditor';
 import MikuConfigEditor from './MikuConfigEditor';
 import AgentChatEditor from './AgentChatEditor';
+import RemoteStatusBoard from './RemoteStatusBoard';
 
 /**
  * EditorSwitcher component
@@ -20,8 +23,26 @@ import AgentChatEditor from './AgentChatEditor';
  * All other editor types use key-based remounting for state isolation.
  */
 export default function EditorSwitcher() {
-  const { openDocuments, activeDocumentId, setContent, setContentForDocument } = useDocument();
+  const { openDocuments, activeDocumentId, setContent, setContentForDocument, openDocument } = useDocument();
   const { setActiveDocumentId } = useMiku();
+  const { workspace } = useWorkspace();
+  const { remote, clearPendingAgentChat } = useRemote();
+
+  // Show the remote status board when workspace is remote and no document is open
+  const isRemoteWorkspace = !!workspace.currentWorkspace?.remote;
+  const hasNoDocuments = openDocuments.length === 0;
+
+  // Auto-open agent chat file when the remote context signals one is ready
+  const pendingChatRef = useRef<string | null>(null);
+  useEffect(() => {
+    const path = remote.pendingAgentChatPath;
+    if (path && path !== pendingChatRef.current) {
+      pendingChatRef.current = path;
+      openDocument(path).then(() => {
+        clearPendingAgentChat();
+      }).catch(console.error);
+    }
+  }, [remote.pendingAgentChatPath, openDocument, clearPendingAgentChat]);
 
   // Get the active document
   const activeDocument = openDocuments.find(d => d.id === activeDocumentId);
@@ -103,6 +124,11 @@ export default function EditorSwitcher() {
     // Default to BlockEditor for markdown files
     return <BlockEditor key={editorKey} />;
   };
+
+  // When in a remote workspace with no documents open, show the status dashboard
+  if (isRemoteWorkspace && hasNoDocuments) {
+    return <RemoteStatusBoard />;
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

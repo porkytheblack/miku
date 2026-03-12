@@ -40,6 +40,8 @@ interface WorkspaceContextType {
   workspace: WorkspaceState;
   selectWorkspace: () => Promise<void>;
   openWorkspace: (path: string) => Promise<void>;
+  /** Open a remote workspace with remote metadata pre-set */
+  openRemoteWorkspace: (path: string, remoteInfo: WorkspaceRemoteInfo) => Promise<void>;
   refreshFiles: () => Promise<void>;
   refreshEnvFiles: () => Promise<void>;
   createFile: (name: string, parentPath?: string) => Promise<string | null>;
@@ -165,6 +167,39 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await openWorkspaceInternal(path);
   }, []);
 
+  const openRemoteWorkspace = useCallback(async (path: string, remoteInfo: WorkspaceRemoteInfo) => {
+    if (!isTauri()) return;
+
+    setWorkspace(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      // Get workspace info (creates it if needed)
+      const workspaceInfo = await invoke<Workspace>('get_workspace_info', { path });
+
+      // Load any files already in the directory
+      let files: WorkspaceFile[] = [];
+      let envFiles: WorkspaceFile[] = [];
+      try {
+        files = await invoke<WorkspaceFile[]>('list_workspace_files', { workspacePath: path });
+        envFiles = await invoke<WorkspaceFile[]>('list_env_files', { workspacePath: path });
+      } catch {
+        // Directory may be empty or not yet synced
+      }
+
+      setWorkspace(prev => ({
+        ...prev,
+        currentWorkspace: { ...workspaceInfo, remote: remoteInfo },
+        files,
+        envFiles,
+        isLoading: false,
+        remoteStatus: remoteInfo.status,
+      }));
+    } catch (error) {
+      console.error('Failed to open remote workspace:', error);
+      setWorkspace(prev => ({ ...prev, isLoading: false }));
+    }
+  }, []);
+
   const refreshFiles = useCallback(async () => {
     if (!isTauri() || !workspace.currentWorkspace) return;
 
@@ -282,6 +317,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         workspace,
         selectWorkspace,
         openWorkspace,
+        openRemoteWorkspace,
         refreshFiles,
         refreshEnvFiles,
         createFile,
