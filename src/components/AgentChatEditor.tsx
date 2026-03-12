@@ -5,9 +5,8 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { isTauri } from '@/lib/tauri';
 import {
   AcpClient,
-  AcpSessionUpdate,
-  AcpPermissionRequest,
-  AcpToolCallInfo,
+  type AcpSessionUpdate,
+  type AcpToolCallInfo,
 } from '@/lib/acpClient';
 import {
   AgentChatMessage,
@@ -43,7 +42,6 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingThought, setStreamingThought] = useState('');
   const [activeToolCalls, setActiveToolCalls] = useState<Map<string, AcpToolCallInfo>>(new Map());
-  const [pendingPermission, setPendingPermission] = useState<AcpPermissionRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stderrLog, setStderrLog] = useState('');
   const [agentName, setAgentName] = useState(doc.agentConfig.agentName || 'Claude Code');
@@ -54,7 +52,6 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const clientRef = useRef<AcpClient | null>(null);
-  const permissionResolverRef = useRef<((result: { optionId: string } | 'cancelled') => void) | null>(null);
 
   const inTauri = isTauri();
 
@@ -82,7 +79,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   // Connect to Claude Code
   const handleConnect = useCallback(async () => {
     if (!inTauri) {
-      setError('ACP requires the Miku desktop app (Tauri) to connect to Claude Code.');
+      setError('Agent Chat requires the Miku desktop app (Tauri) to connect to Claude Code.');
       return;
     }
 
@@ -139,14 +136,6 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             // Could update title
             break;
         }
-      };
-
-      // Permission handler
-      client.onPermissionRequest = async (req: AcpPermissionRequest) => {
-        return new Promise((resolve) => {
-          setPendingPermission(req);
-          permissionResolverRef.current = resolve;
-        });
       };
 
       // Error handler
@@ -221,23 +210,24 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     setIsRunning(true);
 
     try {
-      const result = await clientRef.current.prompt(text);
+      const { resultText } = await clientRef.current.prompt(text);
 
       // Build assistant message from accumulated streaming content
+      // Use functional state reads to get latest values
       setStreamingContent(prev => {
         setStreamingThought(thought => {
           setActiveToolCalls(toolCalls => {
+            const content = prev || resultText || '';
             const assistantMsg: AgentChatMessage = {
               id: generateMessageId(),
               role: 'assistant',
-              content: prev,
+              content,
               timestamp: new Date().toISOString(),
               toolCalls: toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined,
             };
 
             const finalMessages: AgentChatMessage[] = [...newMessages];
 
-            // Add thought message if any
             if (thought) {
               finalMessages.push({
                 id: generateMessageId(),
@@ -272,14 +262,6 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     await clientRef.current?.cancel();
   }, []);
 
-  const handlePermission = useCallback((optionId: string | null) => {
-    if (permissionResolverRef.current) {
-      permissionResolverRef.current(optionId ? { optionId } : 'cancelled');
-      permissionResolverRef.current = null;
-    }
-    setPendingPermission(null);
-  }, []);
-
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -311,7 +293,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         </svg>
         <p style={{ fontSize: '16px', fontWeight: 500 }}>Agent Chat requires Miku Desktop</p>
         <p style={{ fontSize: '13px', textAlign: 'center' }}>
-          ACP connects to Claude Code running on your device. This feature requires the Miku desktop app (Tauri).
+          Connects to Claude Code running on your device. This feature requires the Miku desktop app (Tauri).
         </p>
       </div>
     );
@@ -349,7 +331,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             border: '1px solid rgba(99, 102, 241, 0.3)',
             borderRadius: '6px', color: 'rgb(99, 102, 241)', fontWeight: 500,
           }}>
-            ACP
+            CLI
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -512,7 +494,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           }}>
             <Spinner size={24} />
             <p style={{ fontSize: '14px' }}>Connecting to Claude Code...</p>
-            <p style={{ fontSize: '12px' }}>Spawning claude process via ACP</p>
+            <p style={{ fontSize: '12px' }}>Verifying Claude Code installation...</p>
             {stderrLog && (
               <pre style={{
                 marginTop: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)',
@@ -584,15 +566,6 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             <Spinner />
             <span>{agentName} is thinking...</span>
           </div>
-        )}
-
-        {/* Permission dialog */}
-        {pendingPermission && (
-          <PermissionDialog
-            request={pendingPermission}
-            onSelect={(optionId) => handlePermission(optionId)}
-            onCancel={() => handlePermission(null)}
-          />
         )}
 
         {/* Error */}
@@ -836,80 +809,6 @@ function ToolCallBlock({ toolCall }: { toolCall: AcpToolCallInfo }) {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function PermissionDialog({
-  request,
-  onSelect,
-  onCancel,
-}: {
-  request: AcpPermissionRequest;
-  onSelect: (optionId: string) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div style={{
-      margin: '8px 0', padding: '12px 14px',
-      border: '1px solid rgba(245, 166, 35, 0.4)',
-      borderRadius: '8px', background: 'rgba(245, 166, 35, 0.06)',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        marginBottom: '8px', fontSize: '13px', fontWeight: 600,
-        color: 'var(--text-warning, #f5a623)',
-      }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          <line x1="12" y1="9" x2="12" y2="13" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
-        Permission Required
-      </div>
-      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-        <strong>{request.toolCall.title}</strong>
-        {request.toolCall.rawInput != null && (
-          <pre style={{
-            margin: '6px 0 0', padding: '6px 8px', background: 'var(--bg-tertiary)',
-            borderRadius: '4px', fontSize: '11px',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
-            {formatUnknown(request.toolCall.rawInput)}
-          </pre>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        {request.options.map((opt) => (
-          <button
-            key={opt.optionId}
-            onClick={() => onSelect(opt.optionId)}
-            style={{
-              padding: '6px 14px',
-              background: opt.kind === 'allow_once' || opt.kind === 'allow_always'
-                ? 'var(--text-accent)' : 'transparent',
-              border: opt.kind === 'allow_once' || opt.kind === 'allow_always'
-                ? 'none' : '1px solid var(--border-default)',
-              borderRadius: '6px',
-              color: opt.kind === 'allow_once' || opt.kind === 'allow_always'
-                ? 'white' : 'var(--text-secondary)',
-              cursor: 'pointer', fontSize: '13px', fontWeight: 500,
-            }}
-          >
-            {opt.name}
-          </button>
-        ))}
-        <button
-          onClick={onCancel}
-          style={{
-            padding: '6px 14px', background: 'transparent',
-            border: '1px solid rgba(231, 76, 60, 0.3)', borderRadius: '6px',
-            color: '#e74c3c', cursor: 'pointer', fontSize: '13px',
-          }}
-        >
-          Cancel
-        </button>
-      </div>
     </div>
   );
 }
