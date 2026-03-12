@@ -89,6 +89,15 @@ const FileIcons = {
       <line x1="5.5" y1="7.5" x2="9" y2="7.5" stroke="var(--accent-primary)" strokeWidth="1" strokeLinecap="round" />
     </svg>
   ),
+  // Agent chat file - speech bubble icon
+  agentChat: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M2 3C2 2.44772 2.44772 2 3 2H13C13.5523 2 14 2.44772 14 3V10C14 10.5523 13.5523 11 13 11H5L2 14V3Z" fill="var(--accent-subtle)" stroke="var(--accent-primary)" strokeWidth="1.5" />
+      <circle cx="5.5" cy="6.5" r="0.75" fill="var(--accent-primary)" />
+      <circle cx="8" cy="6.5" r="0.75" fill="var(--accent-primary)" />
+      <circle cx="10.5" cy="6.5" r="0.75" fill="var(--accent-primary)" />
+    </svg>
+  ),
   // Chevron for folder expand/collapse
   chevron: (isExpanded: boolean) => (
     <svg
@@ -120,6 +129,9 @@ const getFileIcon = (file: WorkspaceFile, isExpanded: boolean = false) => {
   }
   if (file.name.endsWith('.docs') || file.name.endsWith('.miku-docs')) {
     return FileIcons.docs;
+  }
+  if (file.name.endsWith('.miku-chat')) {
+    return FileIcons.agentChat;
   }
   if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
     return FileIcons.markdown;

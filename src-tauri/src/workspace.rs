@@ -175,6 +175,7 @@ fn list_directory(path: &Path, is_root: bool) -> Pin<Box<dyn Future<Output = Res
                     if ext_str == "md" || ext_str == "markdown" || ext_str == "mdown"
                         || ext_str == "kanban" || ext_str == "miku-kanban"
                         || ext_str == "docs" || ext_str == "miku-docs"
+                        || ext_str == "miku-chat"
                     {
                         files.push(WorkspaceFile {
                             name: file_name,
