@@ -83,9 +83,10 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const inTauri = isTauri();
 
   // Persist doc
-  const persistDoc = useCallback((msgs: AgentChatMessage[]) => {
+  const persistDoc = useCallback((msgs: AgentChatMessage[], configOverrides?: Partial<AgentChatDocument['agentConfig']>) => {
     const updated: AgentChatDocument = {
       ...doc,
+      agentConfig: { ...doc.agentConfig, ...configOverrides },
       messages: msgs,
       updatedAt: new Date().toISOString(),
     };
@@ -196,12 +197,15 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
       clientRef.current = client;
       setIsConnected(true);
       setAgentName(client.agentInfo?.name || 'Claude Code');
+
+      // Persist the working directory so reopening this chat remembers it
+      queueMicrotask(() => persistDoc(messages, { cwd }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect');
     } finally {
       setIsConnecting(false);
     }
-  }, [inTauri, cwdInput, permissionMode, workspace.currentWorkspace?.path]);
+  }, [inTauri, cwdInput, permissionMode, workspace.currentWorkspace?.path, messages, persistDoc]);
 
   // Cleanup
   useEffect(() => {
