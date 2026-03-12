@@ -73,6 +73,8 @@ interface RemoteContextType {
   getAgentRelayRemote: () => AgentRelayRemote | null;
   /** Clear the pending agent chat path after it has been opened */
   clearPendingAgentChat: () => void;
+  /** Update agent status (called by AgentChatEditor to keep dashboard in sync) */
+  setAgentStatus: (status: AgentActivityStatus | null, connectionStatus: AgentConnectionStatus | null) => void;
 }
 
 const RemoteContext = createContext<RemoteContextType | undefined>(undefined);
@@ -345,6 +347,9 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
   const clearPendingAgentChat = useCallback(() => {
     setRemote(prev => ({ ...prev, pendingAgentChatPath: null }));
   }, []);
+  const setAgentStatus = useCallback((status: AgentActivityStatus | null, connectionStatus: AgentConnectionStatus | null) => {
+    setRemote(prev => ({ ...prev, agentStatus: status, agentConnectionStatus: connectionStatus }));
+  }, []);
 
   const value: RemoteContextType = {
     remote,
@@ -355,6 +360,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
     getAgentRelayHost,
     getAgentRelayRemote,
     clearPendingAgentChat,
+    setAgentStatus,
   };
 
   return (

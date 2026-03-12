@@ -66,7 +66,7 @@ interface AgentChatEditorProps {
 // ============================================
 export default function AgentChatEditor({ initialContent, onContentChange }: AgentChatEditorProps) {
   const { workspace } = useWorkspace();
-  const { isActive: isRemoteActive, remote: remoteState, getAgentRelayRemote, getAgentRelayHost } = useRemote();
+  const { isActive: isRemoteActive, remote: remoteState, getAgentRelayRemote, getAgentRelayHost, setAgentStatus } = useRemote();
 
   // Remote guest mode: this chat is a relay viewer, not a local ACP session
   const isRemoteGuest = isRemoteActive && remoteState.role === 'guest';
@@ -299,6 +299,9 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         const wasRunning = status === 'thinking' || status === 'working';
         setIsRunning(wasRunning);
         setIsConnected(connectionStatus === 'connected');
+
+        // Keep RemoteContext in sync for the status dashboard
+        setAgentStatus(status, connectionStatus);
 
         // When agent transitions to idle, clear streaming state
         // (the host will send the authoritative session state separately)
