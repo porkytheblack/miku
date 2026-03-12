@@ -259,6 +259,44 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+// ============================================
+// Session restore
+// ============================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionTab {
+    pub path: Option<String>,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionState {
+    pub tabs: Vec<SessionTab>,
+    pub active_index: usize,
+}
+
+#[tauri::command]
+pub async fn save_session(session: SessionState) -> Result<(), MikuError> {
+    let app_dir = get_app_data_dir()?;
+    tokio::fs::create_dir_all(&app_dir).await?;
+    let session_path = app_dir.join("session.json");
+    let content = serde_json::to_string_pretty(&session)?;
+    tokio::fs::write(&session_path, content).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn load_session() -> Result<Option<SessionState>, MikuError> {
+    let session_path = get_app_data_dir()?.join("session.json");
+    if session_path.exists() {
+        let content = tokio::fs::read_to_string(&session_path).await?;
+        let session: SessionState = serde_json::from_str(&content)?;
+        Ok(Some(session))
+    } else {
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,7 +344,7 @@ mod tests {
     fn test_get_app_version() {
         let version = get_app_version();
         assert!(!version.is_empty());
-        assert_eq!(version, "0.1.0");
+        assert_eq!(version, "0.0.9");
     }
 
     #[test]

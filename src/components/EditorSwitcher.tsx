@@ -8,20 +8,19 @@ import BlockEditor from './BlockEditor';
 import EnvEditor from './EnvEditor';
 import KanbanEditor from './KanbanEditor';
 import DocsEditor from './DocsEditor';
+import MikuConfigEditor from './MikuConfigEditor';
+import AgentChatEditor from './AgentChatEditor';
 
 /**
  * EditorSwitcher component
- * Detects the file type of the active document and renders the appropriate editor
- * - .miku-env files -> EnvEditor (no AI, secure)
- * - .kanban files -> KanbanEditor (kanban board)
- * - .docs files -> DocsEditor (documentation viewer)
- * - .md files -> BlockEditor (with AI suggestions)
+ * Detects the file type of the active document and renders the appropriate editor.
  *
- * IMPORTANT: Uses key prop to force React to completely remount the editor
- * when switching documents. This ensures complete state isolation between files.
+ * Agent chat editors are kept mounted (but hidden) when switching tabs so that
+ * the AcpClient connection and chat history stay alive in the background.
+ * All other editor types use key-based remounting for state isolation.
  */
 export default function EditorSwitcher() {
-  const { openDocuments, activeDocumentId, setContent } = useDocument();
+  const { openDocuments, activeDocumentId, setContent, setContentForDocument } = useDocument();
   const { setActiveDocumentId } = useMiku();
 
   // Get the active document
@@ -33,7 +32,6 @@ export default function EditorSwitcher() {
   }, [activeDocumentId, setActiveDocumentId]);
 
   // Detect file type synchronously using useMemo to avoid race conditions
-  // when switching documents. This ensures the correct editor renders immediately.
   const fileType = useMemo(() => {
     if (activeDocument) {
       return detectFileType(activeDocument.path, activeDocument.content);
@@ -41,47 +39,123 @@ export default function EditorSwitcher() {
     return 'markdown';
   }, [activeDocument]);
 
-  // Handle content change from custom editors (EnvEditor, KanbanEditor)
+  // Handle content change from the active non-agent-chat editor
   const handleContentChange = useCallback((content: string) => {
     setContent(content);
   }, [setContent]);
 
   // Generate a unique key for the editor based on document ID and type
-  // This forces React to completely remount the editor when switching documents
   const editorKey = `${activeDocumentId}-${fileType}`;
 
-  // Render appropriate editor based on file type
-  if (fileType === 'miku-env') {
-    return (
-      <EnvEditor
-        key={editorKey}
-        initialContent={activeDocument?.content}
+  // Collect all open agent-chat documents (kept mounted for background persistence)
+  const agentChatDocs = useMemo(() =>
+    openDocuments.filter(d => {
+      const ft = detectFileType(d.path, d.content);
+      return ft === 'agent-chat';
+    }),
+    [openDocuments]
+  );
+
+  // Render the active non-agent-chat editor
+  const renderActiveEditor = () => {
+    if (fileType === 'agent-chat') return null; // Handled by persistent layer
+
+    if (fileType === 'miku-env') {
+      return (
+        <EnvEditor
+          key={editorKey}
+          initialContent={activeDocument?.content}
+          onContentChange={handleContentChange}
+        />
+      );
+    }
+
+    if (fileType === 'kanban') {
+      return (
+        <KanbanEditor
+          key={editorKey}
+          initialContent={activeDocument?.content}
+          onContentChange={handleContentChange}
+        />
+      );
+    }
+
+    if (fileType === 'docs') {
+      return (
+        <DocsEditor
+          key={editorKey}
+          initialContent={activeDocument?.content}
+          onContentChange={handleContentChange}
+        />
+      );
+    }
+
+    if (fileType === 'miku-config') {
+      return (
+        <MikuConfigEditor
+          key={editorKey}
+          initialContent={activeDocument?.content}
+          onContentChange={handleContentChange}
+        />
+      );
+    }
+
+    // Default to BlockEditor for markdown files
+    return <BlockEditor key={editorKey} />;
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Persistent agent chat editors - stay mounted, hidden when inactive */}
+      {agentChatDocs.map(doc => (
+        <PersistentAgentChat
+          key={doc.id}
+          docId={doc.id}
+          isActive={doc.id === activeDocumentId}
+          initialContent={doc.content}
+          setContentForDocument={setContentForDocument}
+        />
+      ))}
+
+      {/* Active non-agent-chat editor */}
+      {fileType !== 'agent-chat' && renderActiveEditor()}
+    </div>
+  );
+}
+
+/**
+ * Wrapper that provides a stable, document-scoped onContentChange callback
+ * so background agent chats write to the correct document.
+ */
+function PersistentAgentChat({
+  docId,
+  isActive,
+  initialContent,
+  setContentForDocument,
+}: {
+  docId: string;
+  isActive: boolean;
+  initialContent: string;
+  setContentForDocument: (docId: string, content: string) => void;
+}) {
+  const handleContentChange = useCallback((content: string) => {
+    setContentForDocument(docId, content);
+  }, [docId, setContentForDocument]);
+
+  return (
+    <div
+      style={{
+        position: isActive ? 'relative' : 'absolute',
+        top: 0, left: 0, width: '100%', height: '100%',
+        visibility: isActive ? 'visible' : 'hidden',
+        pointerEvents: isActive ? 'auto' : 'none',
+        zIndex: isActive ? 1 : 0,
+      }}
+    >
+      <AgentChatEditor
+        initialContent={initialContent}
         onContentChange={handleContentChange}
       />
-    );
-  }
-
-  if (fileType === 'kanban') {
-    return (
-      <KanbanEditor
-        key={editorKey}
-        initialContent={activeDocument?.content}
-        onContentChange={handleContentChange}
-      />
-    );
-  }
-
-  if (fileType === 'docs') {
-    return (
-      <DocsEditor
-        key={editorKey}
-        initialContent={activeDocument?.content}
-        onContentChange={handleContentChange}
-      />
-    );
-  }
-
-  // Default to BlockEditor for markdown files
-  // Using key prop ensures complete state isolation when switching documents
-  return <BlockEditor key={editorKey} />;
+    </div>
+  );
 }

@@ -117,6 +117,28 @@ export async function getAppVersion(): Promise<string> {
   return invoke<string>('get_app_version');
 }
 
+// ============================================
+// Session restore
+// ============================================
+
+export interface SessionTab {
+  path: string | null;
+  content: string;
+}
+
+export interface SessionState {
+  tabs: SessionTab[];
+  active_index: number;
+}
+
+export async function saveSession(session: SessionState): Promise<void> {
+  return invoke('save_session', { session });
+}
+
+export async function loadSession(): Promise<SessionState | null> {
+  return invoke<SessionState | null>('load_session');
+}
+
 /**
  * Convert frontend settings to backend format
  */
@@ -310,4 +332,24 @@ export async function deleteFile(path: string): Promise<void> {
  */
 export async function renameFile(oldPath: string, newName: string): Promise<string> {
   return invoke<string>('rename_file', { oldPath, newName });
+}
+
+// ============================================
+// Window commands
+// ============================================
+
+export async function setAlwaysOnTop(onTop: boolean): Promise<void> {
+  return invoke('set_always_on_top', { onTop });
+}
+
+export async function getAlwaysOnTop(): Promise<boolean> {
+  return invoke<boolean>('get_always_on_top');
+}
+
+export async function minimizeToTray(): Promise<void> {
+  return invoke('minimize_to_tray');
+}
+
+export async function createNewWindow(): Promise<void> {
+  return invoke('create_new_window');
 }

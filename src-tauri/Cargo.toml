@@ -19,7 +19,7 @@ tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.10.1", features = [] }
+tauri = { version = "2.10.1", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
@@ -28,4 +28,5 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 thiserror = "1.0"
 dirs = "5.0"
-tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread", "process", "io-util"] }
+which = "7"

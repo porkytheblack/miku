@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "name": "Miku Code Assistant",
+  "description": "An AI coding agent powered by Miku that helps you write and review code",
+  "workingDirectory": ".",
+  "provider": {
+    "type": "anthropic",
+    "model": "claude-sonnet-4-5-20250514",
+    "apiKeyEnv": "ANTHROPIC_API_KEY"
+  },
+  "systemPrompt": "You are Miku, a helpful and thoughtful AI coding assistant. You help developers write, review, and improve their code. Be concise, accurate, and respectful of the developer's coding style.",
+  "modes": [
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Write and edit code files"
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "description": "Review code and suggest improvements"
+    },
+    {
+      "id": "ask",
+      "name": "Ask",
+      "description": "Answer questions about the codebase without making changes"
+    }
+  ],
+  "permissions": {
+    "allowFileRead": true,
+    "allowFileWrite": true,
+    "allowTerminal": true,
+    "deniedPaths": [
+      ".env",
+      ".env.local",
+      "secrets/",
+      "node_modules/"
+    ]
+  },
+  "tools": [
+    {
+      "name": "analyze_dependencies",
+      "description": "Analyze project dependencies and check for outdated packages",
+      "parameters": {
+        "packageManager": {
+          "type": "string",
+          "description": "The package manager to use (npm, yarn, pnpm)",
+          "required": true,
+          "enum": ["npm", "yarn", "pnpm"]
+        }
+      },
+      "handler": "./tools/analyze-deps.js"
+    }
+  ],
+  "mcpServers": [],
+  "env": {}
+}

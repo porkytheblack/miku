@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Miku editor",
-  "windows": ["main"],
+  "windows": ["main", "miku-*"],
   "permissions": [
     "core:default",
     "dialog:default",
@@ -15,6 +15,37 @@
     "fs:allow-app-write-recursive",
     "fs:create-app-specific-dirs",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true
+        },
+        {
+          "name": "claude-cmd",
+          "cmd": "claude.cmd",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true
+        },
+        {
+          "name": "claude-cmd",
+          "cmd": "claude.cmd",
+          "args": true
+        }
+      ]
+    },
+    "shell:allow-stdin-write",
     "updater:default",
     "process:allow-restart",
     "process:allow-exit"

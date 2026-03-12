@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
-import { isTauri, safeTauriCall, openFile, saveFile, addRecentFile, getRecentFiles } from '@/lib/tauri';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react';
+import { isTauri, safeTauriCall, openFile, saveFile, addRecentFile, getRecentFiles, saveSession, loadSession } from '@/lib/tauri';
+import type { SessionState } from '@/lib/tauri/commands';
 
 interface OpenDocument {
   id: string;
@@ -23,6 +24,7 @@ interface DocumentContextType {
   openDocuments: OpenDocument[];
   activeDocumentId: string | null;
   setContent: (content: string) => void;
+  setContentForDocument: (docId: string, content: string) => void;
   setOriginalContent: (content: string) => void;
   openDocument: (path?: string) => Promise<void>;
   saveDocument: (path?: string) => Promise<void>;
@@ -92,6 +94,87 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     contentGetterRef.current = getter;
   }, []);
 
+  const sessionRestoredRef = useRef(false);
+
+  // Restore session on mount (only once, only in Tauri)
+  useEffect(() => {
+    if (sessionRestoredRef.current || !isTauri()) return;
+    sessionRestoredRef.current = true;
+
+    (async () => {
+      try {
+        const session = await loadSession();
+        if (!session || session.tabs.length === 0) return;
+
+        const restoredDocs: OpenDocument[] = [];
+        for (const tab of session.tabs) {
+          let content = tab.content;
+          // If the tab has a file path, try to read the latest content from disk
+          if (tab.path) {
+            try {
+              const doc = await openFile(tab.path);
+              content = doc.content;
+            } catch {
+              // File may have been deleted - skip this tab
+              continue;
+            }
+          }
+          restoredDocs.push({
+            id: generateDocId(),
+            path: tab.path,
+            content,
+            originalContent: content,
+            isModified: false,
+          });
+        }
+
+        if (restoredDocs.length > 0) {
+          setOpenDocuments(restoredDocs);
+          const activeIdx = Math.min(session.active_index, restoredDocs.length - 1);
+          setActiveDocumentId(restoredDocs[activeIdx].id);
+        }
+      } catch (err) {
+        console.error('Failed to restore session:', err);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist session whenever tabs change (debounced)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isTauri() || !sessionRestoredRef.current) return;
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const activeIdx = openDocuments.findIndex(d => d.id === activeDocumentId);
+      const session: SessionState = {
+        tabs: openDocuments.map(d => ({ path: d.path, content: d.content })),
+        active_index: Math.max(0, activeIdx),
+      };
+      saveSession(session).catch(err => console.error('Failed to save session:', err));
+    }, 500);
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [openDocuments, activeDocumentId]);
+
+  // Save session on window close
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const handleBeforeUnload = () => {
+      const activeIdx = openDocuments.findIndex(d => d.id === activeDocumentId);
+      const session: SessionState = {
+        tabs: openDocuments.map(d => ({ path: d.path, content: d.content })),
+        active_index: Math.max(0, activeIdx),
+      };
+      // Fire-and-forget - the debounced save should have already captured recent state
+      saveSession(session).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [openDocuments, activeDocumentId]);
+
   const getEditorContent = useCallback((): string => {
     if (contentGetterRef.current) {
       return contentGetterRef.current();
@@ -126,6 +209,19 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         : doc
     ));
   }, [activeDocumentId]);
+
+  // Set content for a specific document by ID (used by persistent editors like agent chat)
+  const setContentForDocument = useCallback((docId: string, content: string) => {
+    setOpenDocuments(prev => prev.map(doc =>
+      doc.id === docId
+        ? {
+            ...doc,
+            content,
+            isModified: content !== doc.originalContent
+          }
+        : doc
+    ));
+  }, []);
 
   // Update the original content baseline for the active document
   // This is used by editors (like EnvEditor) that transform content during load,
@@ -349,6 +445,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         openDocuments,
         activeDocumentId,
         setContent,
+        setContentForDocument,
         setOriginalContent,
         openDocument,
         saveDocument,

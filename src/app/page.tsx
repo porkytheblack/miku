@@ -33,6 +33,7 @@ export default function Home() {
   const [isEnvFileDialogOpen, setIsEnvFileDialogOpen] = useState(false);
   const [isKanbanFileDialogOpen, setIsKanbanFileDialogOpen] = useState(false);
   const [isDocsFileDialogOpen, setIsDocsFileDialogOpen] = useState(false);
+  const [isAgentChatFileDialogOpen, setIsAgentChatFileDialogOpen] = useState(false);
 
   const { workspace, createFile } = useWorkspace();
   const { openDocument, openDocuments, switchToDocument } = useDocument();
@@ -116,6 +117,11 @@ export default function Home() {
     setIsDocsFileDialogOpen(true);
   }, []);
 
+  // Handle agent chat file name request from command palette
+  const handleRequestAgentChatFileName = useCallback(() => {
+    setIsAgentChatFileDialogOpen(true);
+  }, []);
+
   // Handle docs file creation
   const handleCreateDocsFile = useCallback(async (name: string) => {
     if (workspace.currentWorkspace) {
@@ -127,6 +133,18 @@ export default function Home() {
       }
     }
     setIsDocsFileDialogOpen(false);
+  }, [workspace.currentWorkspace, createFile, openDocument]);
+
+  // Handle agent chat file creation
+  const handleCreateAgentChatFile = useCallback(async (name: string) => {
+    if (workspace.currentWorkspace) {
+      const fileName = name.endsWith('.miku-chat') ? name : `${name}.miku-chat`;
+      const filePath = await createFile(fileName, workspace.currentWorkspace.path);
+      if (filePath) {
+        await openDocument(filePath);
+      }
+    }
+    setIsAgentChatFileDialogOpen(false);
   }, [workspace.currentWorkspace, createFile, openDocument]);
 
   // Register global keyboard shortcuts
@@ -208,6 +226,7 @@ export default function Home() {
         onRequestEnvFileName={handleRequestEnvFileName}
         onRequestKanbanFileName={handleRequestKanbanFileName}
         onRequestDocsFileName={handleRequestDocsFileName}
+        onRequestAgentChatFileName={handleRequestAgentChatFileName}
         onToggleGlobalSearch={() => {
           setIsCommandPaletteOpen(false);
           setIsGlobalSearchOpen(true);
@@ -288,6 +307,25 @@ export default function Home() {
         placeholder="project-docs"
         defaultValue=""
         suffix=".docs"
+        submitLabel="Create"
+        cancelLabel="Cancel"
+        validate={(value) => {
+          if (/[<>:"/\\|?*]/.test(value)) {
+            return 'Filename contains invalid characters';
+          }
+          return null;
+        }}
+      />
+      {/* New Agent Chat Dialog */}
+      <InputDialog
+        isOpen={isAgentChatFileDialogOpen}
+        onClose={() => setIsAgentChatFileDialogOpen(false)}
+        onSubmit={handleCreateAgentChatFile}
+        title="New Agent Chat"
+        label="Enter a name for the agent chat"
+        placeholder="my-agent"
+        defaultValue=""
+        suffix=".miku-chat"
         submitLabel="Create"
         cancelLabel="Cancel"
         validate={(value) => {
