@@ -53,7 +53,7 @@ export interface AcpPermissionRequest {
 // Claude Client (Tauri Rust backend)
 // ============================================
 
-export type PermissionMode = 'auto-approve' | 'allowed-tools';
+export type PermissionMode = 'auto-approve' | 'allowed-tools' | 'plan';
 
 export class AcpClient {
   private cwd: string = '';
@@ -66,6 +66,9 @@ export class AcpClient {
   // Permission settings
   permissionMode: PermissionMode = 'auto-approve';
   allowedTools: string[] = [];
+
+  // Model override (empty string = use default)
+  model: string = '';
 
   // Streaming state (shared across event handlers)
   private toolCallMap = new Map<string, AcpToolCallInfo>();
@@ -197,13 +200,17 @@ export class AcpClient {
 
       // Start the process via Rust
       try {
+        const planTools = ['View', 'GlobTool', 'GrepTool', 'BatchTool', 'LS'];
         await invoke('claude_prompt', {
           id: promptId,
           prompt: text,
           cwd: this.cwd,
           sessionId: this.sessionId,
           skipPermissions: this.permissionMode === 'auto-approve',
-          allowedTools: this.permissionMode === 'allowed-tools' ? this.allowedTools : undefined,
+          allowedTools: this.permissionMode === 'plan'
+            ? planTools
+            : this.permissionMode === 'allowed-tools' ? this.allowedTools : undefined,
+          model: this.model || undefined,
         });
       } catch (err) {
         unlistenStdout();

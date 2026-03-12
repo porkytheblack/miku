@@ -25,6 +25,22 @@ const MarkdownPreview = dynamic(
 );
 
 // ============================================
+// Constants
+// ============================================
+const PERMISSION_OPTIONS = [
+  { value: 'auto-approve', label: 'Auto-approve', desc: 'All tools run automatically', color: '#f5a623' },
+  { value: 'allowed-tools', label: 'Default perms', desc: 'Uses your Claude Code config', color: '#27ae60' },
+  { value: 'plan', label: 'Plan mode', desc: 'Read-only, no edits', color: '#5b8def' },
+] as const;
+
+const MODEL_OPTIONS = [
+  { value: '', label: 'Default model', desc: 'Use Claude Code default' },
+  { value: 'claude-sonnet-4-20250514', label: 'Sonnet 4', desc: 'Fast and capable' },
+  { value: 'claude-opus-4-20250514', label: 'Opus 4', desc: 'Most capable' },
+  { value: 'claude-haiku-4-20250506', label: 'Haiku 4', desc: 'Fast and affordable' },
+] as const;
+
+// ============================================
 // Types
 // ============================================
 interface TaskItem {
@@ -71,6 +87,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [agentName, setAgentName] = useState(doc.agentConfig.agentName || 'Claude Code');
   const [cwdInput, setCwdInput] = useState(doc.agentConfig.cwd || workspace.currentWorkspace?.path || '');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto-approve');
+  const [selectedModel, setSelectedModel] = useState('');
 
   // Enhanced state
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -198,6 +215,7 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
       const cwd = cwdInput.trim() || workspace.currentWorkspace?.path || '.';
       client.permissionMode = permissionMode;
+      client.model = selectedModel;
       await client.connect(cwd);
 
       clientRef.current = client;
@@ -246,6 +264,9 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     setIsRunning(true);
 
     try {
+      // Sync current settings before each prompt
+      clientRef.current.permissionMode = permissionMode;
+      clientRef.current.model = selectedModel;
       const { resultText } = await clientRef.current.prompt(text);
 
       const finalMessages: AgentChatMessage[] = [...newMessages];
@@ -345,11 +366,44 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             connected={isConnected}
             connecting={isConnecting}
           />
-          {isConnected && (
-            <PermissionBadge mode={permissionMode} />
-          )}
         </div>
         <div style={S.headerRight}>
+          {isConnected && (
+            <HeaderDropdown
+              label={PERMISSION_OPTIONS.find(o => o.value === permissionMode)?.label || 'Mode'}
+              color={PERMISSION_OPTIONS.find(o => o.value === permissionMode)?.color || 'var(--text-secondary)'}
+              disabled={isRunning}
+            >
+              {PERMISSION_OPTIONS.map(opt => (
+                <DropdownItem
+                  key={opt.value}
+                  selected={permissionMode === opt.value}
+                  onClick={() => setPermissionMode(opt.value as PermissionMode)}
+                >
+                  <span style={{ fontWeight: 500 }}>{opt.label}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{opt.desc}</span>
+                </DropdownItem>
+              ))}
+            </HeaderDropdown>
+          )}
+          {isConnected && (
+            <HeaderDropdown
+              label={MODEL_OPTIONS.find(o => o.value === selectedModel)?.label || 'Default'}
+              color="var(--text-secondary)"
+              disabled={isRunning}
+            >
+              {MODEL_OPTIONS.map(opt => (
+                <DropdownItem
+                  key={opt.value}
+                  selected={selectedModel === opt.value}
+                  onClick={() => setSelectedModel(opt.value)}
+                >
+                  <span style={{ fontWeight: 500 }}>{opt.label}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{opt.desc}</span>
+                </DropdownItem>
+              ))}
+            </HeaderDropdown>
+          )}
           {!isConnected && !isConnecting && (
             <Button variant="primary" size="sm" onClick={handleConnect}>
               Reconnect
@@ -388,6 +442,8 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
             onCwdChange={setCwdInput}
             permissionMode={permissionMode}
             onPermissionModeChange={setPermissionMode}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
             onConnect={handleConnect}
             error={error}
             stderrLog={stderrLog}
@@ -649,12 +705,15 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 // ============================================
 function ConnectScreen({
   cwdInput, onCwdChange, permissionMode, onPermissionModeChange,
+  selectedModel, onModelChange,
   onConnect, error, stderrLog, inTauri,
 }: {
   cwdInput: string;
   onCwdChange: (v: string) => void;
   permissionMode: PermissionMode;
   onPermissionModeChange: (v: PermissionMode) => void;
+  selectedModel: string;
+  onModelChange: (v: string) => void;
   onConnect: () => void;
   error: string | null;
   stderrLog: string;
@@ -700,24 +759,43 @@ function ConnectScreen({
         {/* Permission mode */}
         <div style={S.formGroup}>
           <label style={S.formLabel}>Tool permissions</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <OptionButton
-              selected={permissionMode === 'auto-approve'}
-              onClick={() => onPermissionModeChange('auto-approve')}
-              color="var(--accent-primary)"
-            >
-              <div style={S.optionTitle}>Auto-approve</div>
-              <div style={S.optionDesc}>All tools run automatically</div>
-            </OptionButton>
-            <OptionButton
-              selected={permissionMode === 'allowed-tools'}
-              onClick={() => onPermissionModeChange('allowed-tools')}
-              color="#27ae60"
-            >
-              <div style={S.optionTitle}>Default permissions</div>
-              <div style={S.optionDesc}>Uses your Claude Code config</div>
-            </OptionButton>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {PERMISSION_OPTIONS.map(opt => (
+              <OptionButton
+                key={opt.value}
+                selected={permissionMode === opt.value}
+                onClick={() => onPermissionModeChange(opt.value as PermissionMode)}
+                color={opt.color}
+              >
+                <div style={S.optionTitle}>{opt.label}</div>
+                <div style={S.optionDesc}>{opt.desc}</div>
+              </OptionButton>
+            ))}
           </div>
+        </div>
+
+        {/* Model selection */}
+        <div style={S.formGroup}>
+          <label style={S.formLabel}>Model</label>
+          <select
+            value={selectedModel}
+            onChange={(e) => onModelChange(e.target.value)}
+            style={{
+              ...S.formInput,
+              cursor: 'pointer',
+              appearance: 'none' as const,
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+              paddingRight: '30px',
+            }}
+          >
+            {MODEL_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label} — {opt.desc}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Connect button */}
@@ -1463,19 +1541,90 @@ function StatusBadge({ connected, connecting }: { connected: boolean; connecting
   );
 }
 
-function PermissionBadge({ mode }: { mode: PermissionMode }) {
-  const isAuto = mode === 'auto-approve';
+function HeaderDropdown({ label, color, disabled, children }: {
+  label: string;
+  color: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
   return (
-    <span style={{
-      fontSize: '10px', padding: '2px 8px',
-      background: isAuto ? 'rgba(245, 166, 35, 0.08)' : 'rgba(39, 174, 96, 0.08)',
-      border: `1px solid ${isAuto ? 'rgba(245, 166, 35, 0.25)' : 'rgba(39, 174, 96, 0.25)'}`,
-      borderRadius: 'var(--radius-full)',
-      color: isAuto ? '#f5a623' : '#27ae60',
-      fontWeight: 500,
-    }}>
-      {isAuto ? 'Auto-approve' : 'Default perms'}
-    </span>
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => !disabled && setOpen(!open)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          fontSize: '10px', padding: '2px 8px',
+          background: `${color}14`,
+          border: `1px solid ${color}40`,
+          borderRadius: 'var(--radius-full)',
+          color,
+          fontWeight: 500,
+          cursor: disabled ? 'default' : 'pointer',
+          opacity: disabled ? 0.6 : 1,
+          whiteSpace: 'nowrap',
+          fontFamily: 'inherit',
+        }}
+      >
+        {label}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            zIndex: 100, minWidth: '180px',
+            padding: '4px',
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DropdownItem({ selected, onClick, children }: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: '1px',
+        width: '100%', padding: '6px 10px',
+        background: selected ? 'var(--bg-tertiary)' : 'transparent',
+        border: 'none', borderRadius: 'var(--radius-sm)',
+        cursor: 'pointer', textAlign: 'left',
+        color: 'var(--text-primary)',
+        fontFamily: 'inherit',
+        fontSize: '12px',
+      }}
+      onMouseEnter={e => { if (!selected) (e.currentTarget.style.background = 'var(--bg-secondary)'); }}
+      onMouseLeave={e => { if (!selected) (e.currentTarget.style.background = 'transparent'); }}
+    >
+      {children}
+    </button>
   );
 }
 

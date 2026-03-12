@@ -80,6 +80,7 @@ pub async fn claude_prompt(
     session_id: Option<String>,
     skip_permissions: Option<bool>,
     allowed_tools: Option<Vec<String>>,
+    model: Option<String>,
 ) -> Result<(), MikuError> {
     let claude_bin = find_claude_binary()?;
 
@@ -95,6 +96,12 @@ pub async fn claude_prompt(
         if !tools.is_empty() {
             args.push("--allowedTools".to_string());
             args.push(tools.join(","));
+        }
+    }
+    if let Some(m) = &model {
+        if !m.is_empty() {
+            args.push("--model".to_string());
+            args.push(m.clone());
         }
     }
     if let Some(sid) = &session_id {
