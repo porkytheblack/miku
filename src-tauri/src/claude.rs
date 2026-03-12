@@ -49,11 +49,23 @@ fn find_claude_binary() -> Result<String, MikuError> {
 
     // Common install locations
     let home = dirs::home_dir().unwrap_or_default();
-    let candidates = [
+    let mut candidates: Vec<std::path::PathBuf> = vec![
         home.join(".npm-global/bin/claude"),
         home.join(".local/bin/claude"),
-        home.join(".nvm/versions/node").join("*").join("bin/claude"),
+        // macOS Homebrew paths
+        std::path::PathBuf::from("/opt/homebrew/bin/claude"),
+        std::path::PathBuf::from("/usr/local/bin/claude"),
     ];
+
+    // Enumerate NVM node versions (glob doesn't work with Path::exists)
+    let nvm_dir = home.join(".nvm/versions/node");
+    if nvm_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            for entry in entries.flatten() {
+                candidates.push(entry.path().join("bin/claude"));
+            }
+        }
+    }
 
     for candidate in &candidates {
         if candidate.exists() {
@@ -62,7 +74,7 @@ fn find_claude_binary() -> Result<String, MikuError> {
     }
 
     Err(MikuError::Path(
-        "Could not find 'claude' binary. Make sure Claude Code is installed and in your PATH."
+        "Could not find 'claude' binary. Make sure Claude Code is installed (npm install -g @anthropic-ai/claude-code) and in your PATH."
             .to_string(),
     ))
 }
@@ -111,9 +123,42 @@ pub async fn claude_prompt(
     args.push("-p".to_string());
     args.push(prompt);
 
+    // On macOS, GUI apps don't inherit the user's shell PATH.
+    // Augment PATH with common binary locations so claude (and node) can be found.
+    let path_env = {
+        let mut path = std::env::var("PATH").unwrap_or_default();
+        let home = dirs::home_dir().unwrap_or_default();
+        let extra_paths = [
+            "/usr/local/bin",
+            "/opt/homebrew/bin",
+            &home.join(".local/bin").to_string_lossy().to_string(),
+            &home.join(".npm-global/bin").to_string_lossy().to_string(),
+        ];
+        for p in &extra_paths {
+            if !path.contains(p) {
+                path = format!("{}:{}", p, path);
+            }
+        }
+        // Add NVM current version if available
+        let nvm_current = home.join(".nvm/versions/node");
+        if nvm_current.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&nvm_current) {
+                for entry in entries.flatten() {
+                    let bin = entry.path().join("bin");
+                    let bin_str = bin.to_string_lossy().to_string();
+                    if bin.is_dir() && !path.contains(&bin_str) {
+                        path = format!("{}:{}", bin_str, path);
+                    }
+                }
+            }
+        }
+        path
+    };
+
     let mut child = Command::new(&claude_bin)
         .args(&args)
         .current_dir(&cwd)
+        .env("PATH", &path_env)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .stdin(std::process::Stdio::null())
