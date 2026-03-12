@@ -17,6 +17,15 @@ import {
   generateMessageId,
 } from '@/lib/agentChat';
 
+// ============================================
+// Task tracking types (from TodoWrite tool)
+// ============================================
+interface TaskItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm: string;
+}
+
 interface AgentChatEditorProps {
   initialContent?: string;
   onContentChange: (content: string) => void;
@@ -49,6 +58,8 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
   const [currentMode, setCurrentMode] = useState<string | null>(null);
   const [cwdInput, setCwdInput] = useState(doc.agentConfig.cwd || workspace.currentWorkspace?.path || '');
   const [permissionMode, setPermissionMode] = useState<'auto-approve' | 'allowed-tools'>('auto-approve');
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [fileChanges, setFileChanges] = useState<Map<string, { tool: string; status: string }>>(new Map());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -125,14 +136,36 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
           case 'tool_call_update':
             if (update.toolCall) {
-              const existing = streamToolCallsRef.current.get(update.toolCall.toolCallId);
-              streamToolCallsRef.current.set(update.toolCall.toolCallId, { ...existing, ...update.toolCall });
+              const merged = { ...streamToolCallsRef.current.get(update.toolCall.toolCallId), ...update.toolCall };
+              streamToolCallsRef.current.set(update.toolCall.toolCallId, merged);
               setActiveToolCalls(prev => {
                 const next = new Map(prev);
                 const ex = next.get(update.toolCall!.toolCallId);
                 next.set(update.toolCall!.toolCallId, { ...ex, ...update.toolCall! });
                 return next;
               });
+
+              // Extract tasks from TodoWrite tool calls
+              if (merged.title === 'TodoWrite' && merged.rawInput) {
+                const inp = merged.rawInput as { todos?: TaskItem[] };
+                if (inp.todos && Array.isArray(inp.todos)) {
+                  setTasks(inp.todos);
+                }
+              }
+
+              // Track file changes from Edit/Write/Read tools
+              const toolName = merged.title;
+              if (toolName && merged.rawInput) {
+                const inp = merged.rawInput as Record<string, unknown>;
+                const filePath = (inp.file_path || inp.path || inp.command) as string | undefined;
+                if (filePath && ['Edit', 'Write', 'Read', 'NotebookEdit'].includes(toolName)) {
+                  setFileChanges(prev => {
+                    const next = new Map(prev);
+                    next.set(filePath, { tool: toolName, status: merged.status || 'in_progress' });
+                    return next;
+                  });
+                }
+              }
             }
             break;
 
@@ -578,6 +611,18 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
           <ChatMessage key={msg.id} message={msg} agentName={agentName} />
         ))}
 
+        {/* Task panel (sticky) */}
+        {tasks.length > 0 && (
+          <div style={{ margin: '8px 0' }}>
+            <TaskList tasks={tasks} />
+          </div>
+        )}
+
+        {/* File changes summary */}
+        {fileChanges.size > 0 && (
+          <FileChangesSummary changes={fileChanges} />
+        )}
+
         {/* Active tool calls */}
         {activeToolCalls.size > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -788,6 +833,8 @@ function ChatMessage({ message, agentName }: { message: AgentChatMessage; agentN
 
 function ToolCallBlock({ toolCall }: { toolCall: AcpToolCallInfo }) {
   const [expanded, setExpanded] = useState(false);
+  const toolName = toolCall.title || '';
+  const input = toolCall.rawInput as Record<string, unknown> | undefined;
 
   const statusIcon = toolCall.status === 'completed' ? '\u2713'
     : toolCall.status === 'failed' ? '\u2717'
@@ -798,11 +845,13 @@ function ToolCallBlock({ toolCall }: { toolCall: AcpToolCallInfo }) {
     : toolCall.status === 'failed' ? 'var(--text-danger, #e74c3c)'
     : 'var(--text-tertiary)';
 
-  const kindLabel = toolCall.kind ? {
-    read: 'Read', edit: 'Write', delete: 'Delete', move: 'Move',
-    search: 'Search', execute: 'Execute', think: 'Think',
-    fetch: 'Fetch', switch_mode: 'Mode', other: 'Tool',
-  }[toolCall.kind] || 'Tool' : 'Tool';
+  // Derive a human-readable summary line
+  const summary = getToolSummary(toolName, input);
+  // Tool category badge
+  const badge = getToolBadge(toolName);
+
+  // Auto-expand in-progress tool calls (except TodoWrite)
+  const shouldAutoExpand = toolCall.status === 'in_progress' && toolName !== 'TodoWrite';
 
   return (
     <div style={{
@@ -819,75 +868,411 @@ function ToolCallBlock({ toolCall }: { toolCall: AcpToolCallInfo }) {
           fontFamily: 'var(--font-mono)', fontSize: '12px',
         }}
       >
-        <span style={{ color: statusColor, fontWeight: 600, width: '14px' }}>{statusIcon}</span>
+        <span style={{ color: statusColor, fontWeight: 600, width: '14px', flexShrink: 0 }}>
+          {toolCall.status === 'in_progress' ? <MiniSpinner /> : statusIcon}
+        </span>
         <span style={{
-          fontSize: '10px', padding: '1px 5px', background: 'var(--bg-tertiary)',
-          borderRadius: '3px', color: 'var(--text-tertiary)', fontWeight: 500,
+          fontSize: '10px', padding: '1px 5px',
+          background: badge.bg, borderRadius: '3px',
+          color: badge.color, fontWeight: 500, flexShrink: 0,
         }}>
-          {kindLabel}
+          {badge.label}
         </span>
         <span style={{ fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {toolCall.title}
+          {summary}
         </span>
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '10px' }}>
-          {expanded ? '\u25B2' : '\u25BC'}
+        <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', flexShrink: 0 }}>
+          {expanded || shouldAutoExpand ? '\u25B2' : '\u25BC'}
+        </span>
+      </button>
+
+      {(expanded || shouldAutoExpand) && (
+        <div style={{
+          borderTop: '1px solid var(--border-default)',
+          padding: '8px 10px', background: 'var(--bg-primary)',
+        }}>
+          {/* Render tool-specific rich views */}
+          <ToolCallBody toolCall={toolCall} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Rich body rendering for different tool types */
+function ToolCallBody({ toolCall }: { toolCall: AcpToolCallInfo }) {
+  const toolName = toolCall.title || '';
+  const input = toolCall.rawInput as Record<string, unknown> | undefined;
+  const output = toolCall.rawOutput;
+
+  // Edit tool: show file path, old_string -> new_string diff
+  if (toolName === 'Edit' && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <FilePathLabel path={input.file_path as string} />
+        {input.old_string != null && (
+          <DiffView
+            oldStr={String(input.old_string)}
+            newStr={String(input.new_string || '')}
+          />
+        )}
+        {output != null && <ToolOutput output={output} />}
+      </div>
+    );
+  }
+
+  // Write tool: show file path and content
+  if (toolName === 'Write' && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <FilePathLabel path={input.file_path as string} />
+        {input.content != null && (
+          <CodeBlock
+            label="Content"
+            code={String(input.content)}
+            maxHeight={300}
+            language={guessLanguage(String(input.file_path || ''))}
+          />
+        )}
+        {output != null && <ToolOutput output={output} />}
+      </div>
+    );
+  }
+
+  // Read tool: show file path and output content
+  if (toolName === 'Read' && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <FilePathLabel path={input.file_path as string} />
+        {output != null && (
+          <CodeBlock
+            label="File content"
+            code={extractTextOutput(output)}
+            maxHeight={400}
+            language={guessLanguage(String(input.file_path || ''))}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Bash tool: show command and output
+  if (toolName === 'Bash' && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{
+          padding: '6px 10px', background: 'rgba(0,0,0,0.15)',
+          borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '12px',
+          color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px',
+        }}>
+          <span style={{ color: 'var(--text-tertiary)', userSelect: 'none' }}>$</span>
+          <span>{String(input.command || '')}</span>
+        </div>
+        {input.description && (
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+            {String(input.description)}
+          </div>
+        )}
+        {output != null && (
+          <CodeBlock label="Output" code={extractTextOutput(output)} maxHeight={300} />
+        )}
+      </div>
+    );
+  }
+
+  // Grep/Glob search tools
+  if ((toolName === 'Grep' || toolName === 'Glob') && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{
+          padding: '4px 8px', background: 'var(--bg-tertiary)',
+          borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--font-mono)',
+        }}>
+          {toolName === 'Grep' ? `grep "${input.pattern || ''}"` : `glob "${input.pattern || ''}"`}
+          {input.path ? ` in ${input.path}` : ''}
+        </div>
+        {output != null && (
+          <CodeBlock label="Results" code={extractTextOutput(output)} maxHeight={300} />
+        )}
+      </div>
+    );
+  }
+
+  // TodoWrite: show task list
+  if (toolName === 'TodoWrite' && input) {
+    const todos = (input.todos || []) as TaskItem[];
+    return <TaskList tasks={todos} />;
+  }
+
+  // WebSearch / WebFetch
+  if ((toolName === 'WebSearch' || toolName === 'WebFetch') && input) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{
+          padding: '4px 8px', background: 'var(--bg-tertiary)',
+          borderRadius: '4px', fontSize: '11px',
+        }}>
+          {toolName === 'WebSearch' ? `Search: "${input.query || ''}"` : `Fetch: ${input.url || ''}`}
+        </div>
+        {output != null && (
+          <CodeBlock label="Result" code={extractTextOutput(output)} maxHeight={300} />
+        )}
+      </div>
+    );
+  }
+
+  // Generic fallback
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {input != null && (
+        <CodeBlock label="Input" code={formatUnknown(input)} maxHeight={200} />
+      )}
+      {output != null && (
+        <CodeBlock label="Output" code={extractTextOutput(output)} maxHeight={300} />
+      )}
+    </div>
+  );
+}
+
+/** Inline diff view for Edit tool */
+function DiffView({ oldStr, newStr }: { oldStr: string; newStr: string }) {
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+
+  return (
+    <div style={{
+      borderRadius: '4px', overflow: 'hidden',
+      border: '1px solid var(--border-default)', fontSize: '11px',
+      fontFamily: 'var(--font-mono)', lineHeight: '1.5',
+    }}>
+      <div style={{
+        padding: '4px 8px', background: 'var(--bg-tertiary)',
+        fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)',
+        textTransform: 'uppercase', borderBottom: '1px solid var(--border-default)',
+      }}>
+        Changes
+      </div>
+      <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+        {oldLines.map((line, i) => (
+          <div key={`old-${i}`} style={{
+            padding: '1px 8px', background: 'rgba(231, 76, 60, 0.08)',
+            color: '#e74c3c', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            <span style={{ userSelect: 'none', color: 'rgba(231, 76, 60, 0.5)', marginRight: '8px' }}>-</span>
+            {line}
+          </div>
+        ))}
+        {newLines.map((line, i) => (
+          <div key={`new-${i}`} style={{
+            padding: '1px 8px', background: 'rgba(39, 174, 96, 0.08)',
+            color: '#27ae60', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            <span style={{ userSelect: 'none', color: 'rgba(39, 174, 96, 0.5)', marginRight: '8px' }}>+</span>
+            {line}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** File path label with icon */
+function FilePathLabel({ path }: { path?: string }) {
+  if (!path) return null;
+  const fileName = path.split('/').pop() || path;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '6px',
+      fontSize: '12px', fontFamily: 'var(--font-mono)',
+      color: 'var(--text-secondary)',
+    }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
+      <span title={path} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {fileName}
+      </span>
+      <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+        {path !== fileName ? path : ''}
+      </span>
+    </div>
+  );
+}
+
+/** Reusable code block */
+function CodeBlock({ label, code, maxHeight = 200, language }: {
+  label?: string; code: string; maxHeight?: number; language?: string;
+}) {
+  return (
+    <div>
+      {label && (
+        <div style={{
+          fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)',
+          marginBottom: '4px', textTransform: 'uppercase',
+          display: 'flex', alignItems: 'center', gap: '6px',
+        }}>
+          {label}
+          {language && (
+            <span style={{ fontSize: '9px', color: 'var(--text-tertiary)', opacity: 0.6, textTransform: 'lowercase' }}>
+              {language}
+            </span>
+          )}
+        </div>
+      )}
+      <pre style={{
+        margin: 0, padding: '6px 8px', background: 'var(--bg-tertiary)',
+        borderRadius: '4px', fontSize: '11px', lineHeight: '1.4',
+        overflow: 'auto', maxHeight,
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+/** Task list display (from TodoWrite) */
+function TaskList({ tasks }: { tasks: TaskItem[] }) {
+  if (!tasks.length) return null;
+
+  const completed = tasks.filter(t => t.status === 'completed').length;
+  const total = tasks.length;
+
+  return (
+    <div style={{
+      borderRadius: '6px', border: '1px solid var(--border-default)',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '6px 10px', background: 'var(--bg-tertiary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+        borderBottom: '1px solid var(--border-default)',
+      }}>
+        <span>Tasks</span>
+        <span style={{ color: 'var(--text-tertiary)' }}>{completed}/{total} done</span>
+      </div>
+      {/* Progress bar */}
+      <div style={{
+        height: '2px', background: 'var(--bg-tertiary)',
+      }}>
+        <div style={{
+          height: '100%', width: `${total > 0 ? (completed / total) * 100 : 0}%`,
+          background: '#27ae60', transition: 'width 0.3s ease',
+        }} />
+      </div>
+      <div style={{ padding: '4px 0' }}>
+        {tasks.map((task, i) => (
+          <div key={i} style={{
+            padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '8px',
+            fontSize: '12px',
+            opacity: task.status === 'completed' ? 0.6 : 1,
+          }}>
+            <span style={{
+              width: '16px', height: '16px', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '3px', fontSize: '10px',
+              border: task.status === 'completed'
+                ? '1px solid #27ae60'
+                : task.status === 'in_progress'
+                ? '1px solid var(--text-accent)'
+                : '1px solid var(--border-default)',
+              background: task.status === 'completed'
+                ? 'rgba(39,174,96,0.15)'
+                : task.status === 'in_progress'
+                ? 'rgba(99,102,241,0.1)'
+                : 'transparent',
+              color: task.status === 'completed' ? '#27ae60' : task.status === 'in_progress' ? 'var(--text-accent)' : 'var(--text-tertiary)',
+            }}>
+              {task.status === 'completed' ? '\u2713' : task.status === 'in_progress' ? '\u25B6' : '\u25CB'}
+            </span>
+            <span style={{
+              textDecoration: task.status === 'completed' ? 'line-through' : 'none',
+              color: task.status === 'in_progress' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            }}>
+              {task.status === 'in_progress' ? task.activeForm : task.content}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Tool output helper */
+function ToolOutput({ output }: { output: unknown }) {
+  const text = extractTextOutput(output);
+  if (!text) return null;
+  return <CodeBlock label="Output" code={text} maxHeight={200} />;
+}
+
+/** File changes summary panel */
+function FileChangesSummary({ changes }: { changes: Map<string, { tool: string; status: string }> }) {
+  const [expanded, setExpanded] = useState(true);
+  const entries = Array.from(changes.entries());
+
+  const editCount = entries.filter(([, v]) => v.tool === 'Edit' || v.tool === 'Write').length;
+  const readCount = entries.filter(([, v]) => v.tool === 'Read').length;
+
+  return (
+    <div style={{
+      margin: '8px 0', borderRadius: '6px',
+      border: '1px solid var(--border-default)', overflow: 'hidden',
+      background: 'var(--bg-secondary)',
+    }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%', padding: '6px 10px', background: 'transparent',
+          border: 'none', cursor: 'pointer', display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between',
+          fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          Files touched
+        </span>
+        <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>
+          {editCount > 0 && <span style={{ color: '#f5a623' }}>{editCount} edited</span>}
+          {editCount > 0 && readCount > 0 && ' \u00B7 '}
+          {readCount > 0 && <span>{readCount} read</span>}
         </span>
       </button>
 
       {expanded && (
         <div style={{
-          borderTop: '1px solid var(--border-default)',
-          padding: '8px 10px', background: 'var(--bg-primary)',
+          borderTop: '1px solid var(--border-default)', padding: '4px 0',
         }}>
-          {toolCall.rawInput != null && (
-            <div style={{ marginBottom: toolCall.rawOutput != null ? '8px' : 0 }}>
-              <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                Input
-              </div>
-              <pre style={{
-                margin: 0, padding: '6px 8px', background: 'var(--bg-tertiary)',
-                borderRadius: '4px', fontSize: '11px', lineHeight: '1.4',
-                overflow: 'auto', maxHeight: '200px',
-                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          {entries.map(([path, info]) => {
+            const fileName = path.split('/').pop() || path;
+            const isEdit = info.tool === 'Edit' || info.tool === 'Write';
+            return (
+              <div key={path} style={{
+                padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '8px',
+                fontSize: '11px', fontFamily: 'var(--font-mono)',
               }}>
-                {formatUnknown(toolCall.rawInput)}
-              </pre>
-            </div>
-          )}
-
-          {toolCall.rawOutput != null && (
-            <div>
-              <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                Output
+                <span style={{
+                  width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                  background: isEdit ? '#f5a623' : 'rgb(99, 102, 241)',
+                }} />
+                <span style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  color: 'var(--text-secondary)',
+                }} title={path}>
+                  {fileName}
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                  {info.tool}
+                </span>
               </div>
-              <pre style={{
-                margin: 0, padding: '6px 8px', background: 'var(--bg-tertiary)',
-                borderRadius: '4px', fontSize: '11px', lineHeight: '1.4',
-                overflow: 'auto', maxHeight: '300px',
-                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              }}>
-                {formatUnknown(toolCall.rawOutput)}
-              </pre>
-            </div>
-          )}
-
-          {toolCall.content && toolCall.content.length > 0 && (
-            <div>
-              <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                Content
-              </div>
-              {toolCall.content.map((c, i) => (
-                <pre key={i} style={{
-                  margin: 0, padding: '6px 8px', background: 'var(--bg-tertiary)',
-                  borderRadius: '4px', fontSize: '11px', lineHeight: '1.4',
-                  overflow: 'auto', maxHeight: '300px',
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
-                  {JSON.stringify(c, null, 2)}
-                </pre>
-              ))}
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
     </div>
@@ -899,11 +1284,120 @@ function formatUnknown(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+/** Extract text from tool output (handles various formats from Claude CLI) */
+function extractTextOutput(output: unknown): string {
+  if (typeof output === 'string') return output;
+  if (Array.isArray(output)) {
+    return output
+      .map(block => {
+        if (typeof block === 'string') return block;
+        if (block && typeof block === 'object') {
+          if ('text' in block) return String(block.text);
+          if ('content' in block) return String(block.content);
+        }
+        return JSON.stringify(block, null, 2);
+      })
+      .join('\n');
+  }
+  if (output && typeof output === 'object') {
+    const obj = output as Record<string, unknown>;
+    if ('text' in obj) return String(obj.text);
+    if ('content' in obj) return String(obj.content);
+  }
+  return JSON.stringify(output, null, 2);
+}
+
+/** Get a human-readable summary for a tool call */
+function getToolSummary(toolName: string, input?: Record<string, unknown>): string {
+  if (!input) return toolName;
+
+  switch (toolName) {
+    case 'Edit': {
+      const fp = input.file_path as string;
+      return fp ? `Edit ${fp.split('/').pop()}` : 'Edit file';
+    }
+    case 'Write': {
+      const fp = input.file_path as string;
+      return fp ? `Write ${fp.split('/').pop()}` : 'Write file';
+    }
+    case 'Read': {
+      const fp = input.file_path as string;
+      return fp ? `Read ${fp.split('/').pop()}` : 'Read file';
+    }
+    case 'Bash': {
+      const cmd = String(input.command || '').slice(0, 60);
+      return cmd ? `$ ${cmd}${String(input.command || '').length > 60 ? '...' : ''}` : 'Run command';
+    }
+    case 'Grep':
+      return `Search for "${input.pattern || ''}"`;
+    case 'Glob':
+      return `Find files "${input.pattern || ''}"`;
+    case 'TodoWrite':
+      return 'Update tasks';
+    case 'WebSearch':
+      return `Search "${input.query || ''}"`;
+    case 'WebFetch':
+      return `Fetch ${input.url || ''}`;
+    case 'NotebookEdit':
+      return 'Edit notebook';
+    default:
+      return toolName;
+  }
+}
+
+/** Get badge styling for tool category */
+function getToolBadge(toolName: string): { label: string; bg: string; color: string } {
+  switch (toolName) {
+    case 'Edit':
+    case 'Write':
+    case 'NotebookEdit':
+      return { label: 'Edit', bg: 'rgba(245, 166, 35, 0.12)', color: '#f5a623' };
+    case 'Read':
+      return { label: 'Read', bg: 'rgba(99, 102, 241, 0.1)', color: 'rgb(99, 102, 241)' };
+    case 'Bash':
+      return { label: 'Shell', bg: 'rgba(39, 174, 96, 0.1)', color: '#27ae60' };
+    case 'Grep':
+    case 'Glob':
+      return { label: 'Search', bg: 'rgba(155, 89, 182, 0.1)', color: '#9b59b6' };
+    case 'TodoWrite':
+      return { label: 'Tasks', bg: 'rgba(52, 152, 219, 0.1)', color: '#3498db' };
+    case 'WebSearch':
+    case 'WebFetch':
+      return { label: 'Web', bg: 'rgba(230, 126, 34, 0.1)', color: '#e67e22' };
+    default:
+      return { label: 'Tool', bg: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' };
+  }
+}
+
+/** Guess language from file extension */
+function guessLanguage(filePath: string): string | undefined {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    py: 'python', rs: 'rust', go: 'go', rb: 'ruby',
+    json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+    md: 'markdown', css: 'css', scss: 'scss', html: 'html',
+    sh: 'shell', bash: 'shell', zsh: 'shell',
+  };
+  return ext ? map[ext] : undefined;
+}
+
 function Spinner({ size = 14 }: { size?: number }) {
   return (
     <span style={{
       display: 'inline-block', width: size, height: size,
       border: '2px solid var(--border-default)',
+      borderTopColor: 'var(--text-accent)',
+      borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+    }} />
+  );
+}
+
+function MiniSpinner() {
+  return (
+    <span style={{
+      display: 'inline-block', width: 12, height: 12,
+      border: '1.5px solid var(--border-default)',
       borderTopColor: 'var(--text-accent)',
       borderRadius: '50%', animation: 'spin 0.8s linear infinite',
     }} />
