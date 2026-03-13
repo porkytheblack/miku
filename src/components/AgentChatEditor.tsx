@@ -111,17 +111,19 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
 
   const inTauri = isTauri();
 
-  // Persist doc
+  // Persist doc — uses functional setDoc to avoid stale closure (preserves CWD across rapid calls)
   const persistDoc = useCallback((msgs: AgentChatMessage[], configOverrides?: Partial<AgentChatDocument['agentConfig']>) => {
-    const updated: AgentChatDocument = {
-      ...doc,
-      agentConfig: { ...doc.agentConfig, ...configOverrides },
-      messages: msgs,
-      updatedAt: new Date().toISOString(),
-    };
-    setDoc(updated);
-    onContentChange(serializeAgentChatDocument(updated));
-  }, [doc, onContentChange]);
+    setDoc(prevDoc => {
+      const updated: AgentChatDocument = {
+        ...prevDoc,
+        agentConfig: { ...prevDoc.agentConfig, ...configOverrides },
+        messages: msgs,
+        updatedAt: new Date().toISOString(),
+      };
+      queueMicrotask(() => onContentChange(serializeAgentChatDocument(updated)));
+      return updated;
+    });
+  }, [onContentChange]);
 
   // Auto-scroll
   useEffect(() => {
@@ -498,18 +500,12 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
     if (!text || isRunning) return;
 
     // Remote guest: send command to host via relay
+    // Don't add user message locally — the host will relay the authoritative
+    // session state back (including the user message) to avoid doubling.
     if (isRemoteGuest) {
       const relay = getAgentRelayRemote();
       if (!relay) return;
       setInput('');
-
-      const userMsg: AgentChatMessage = {
-        id: generateMessageId(),
-        role: 'user',
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, userMsg]);
       relay.sendCommand(text);
       return;
     }

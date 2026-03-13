@@ -90,6 +90,10 @@ interface RemoteProviderProps {
 export function RemoteProvider({ children }: RemoteProviderProps) {
   const { openRemoteWorkspace, refreshFiles } = useWorkspace();
 
+  // Stable ref so setupPeerHandlers always calls the latest refreshFiles
+  const refreshFilesRef = useRef(refreshFiles);
+  useEffect(() => { refreshFilesRef.current = refreshFiles; }, [refreshFiles]);
+
   const [remote, setRemote] = useState<RemoteState>({
     status: 'disconnected',
     role: null,
@@ -119,22 +123,8 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
       // Workspace manager is created with a placeholder peerId.
       // The actual peerId is set after the peer connects (see startSharing/joinRoom).
       const wsManager = new RemoteWorkspaceManager(peer, workspacePath, 'pending');
-      // Track whether we've already auto-opened a chat file (once per session)
-      let chatAutoOpened = false;
       wsManager.setHandlers({
-        onRefreshFiles: refreshFiles,
-        onFileUpdated: (relativePath) => {
-          // On guest: auto-open the first synced .miku-chat file from the host
-          if (role === 'guest' && !chatAutoOpened && relativePath.endsWith('.miku-chat')) {
-            chatAutoOpened = true;
-            const fullPath = `${workspacePath}/${relativePath}`;
-            setRemote(prev => {
-              // Only set if no pending chat already
-              if (prev.pendingAgentChatPath) return prev;
-              return { ...prev, pendingAgentChatPath: fullPath };
-            });
-          }
-        },
+        onRefreshFiles: () => refreshFilesRef.current(),
         onSyncStatusChange: (syncStatus) => {
           setRemote(prev => ({ ...prev, syncStatus }));
         },
@@ -156,11 +146,6 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
               agentStatus: status,
               agentConnectionStatus: connectionStatus,
             }));
-          },
-          onSessionState: async (_conversation, _tasks) => {
-            // Just update connection status — the guest auto-opens synced .miku-chat files
-            // via the onFileUpdated handler in RemoteWorkspaceManager
-            setRemote(prev => ({ ...prev, agentConnectionStatus: 'connected' }));
           },
         });
         agentRelayRemoteRef.current = relay;
@@ -201,7 +186,7 @@ export function RemoteProvider({ children }: RemoteProviderProps) {
         },
       });
     },
-    [refreshFiles],
+    [], // refreshFiles accessed via ref
   );
 
   const startSharing = useCallback(
