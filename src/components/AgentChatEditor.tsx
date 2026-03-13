@@ -326,6 +326,15 @@ export default function AgentChatEditor({ initialContent, onContentChange }: Age
         }));
         setMessages(chatMessages);
         setIsConnected(true);
+        // Clear streaming state so we don't show both the final messages AND
+        // the streaming section (which has the same content) simultaneously.
+        setIsRunning(false);
+        setStreamingContent('');
+        setStreamingThought('');
+        setActiveToolCalls(new Map());
+        streamContentRef.current = '';
+        streamThoughtRef.current = '';
+        streamToolCallsRef.current = new Map();
       },
       onPermissionRequest: (request) => {
         const permId = request.toolCall?.toolCallId ?? generateMessageId();
