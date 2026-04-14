@@ -139,6 +139,34 @@ export async function loadSession(): Promise<SessionState | null> {
   return invoke<SessionState | null>('load_session');
 }
 
+// ============================================
+// Image assets
+// ============================================
+
+export interface SavedImageAsset {
+  /** Absolute path on disk */
+  absolute_path: string;
+  /** Path to use inside markdown. Relative when a document path was supplied. */
+  markdown_path: string;
+}
+
+/**
+ * Save image bytes to disk next to the current document (in an `assets/`
+ * folder) and return the path to embed in markdown. When no document path
+ * is given, the image is saved in the app data directory.
+ */
+export async function saveImageAsset(
+  documentPath: string | null,
+  data: Uint8Array,
+  extension: string,
+): Promise<SavedImageAsset> {
+  return invoke<SavedImageAsset>('save_image_asset', {
+    documentPath,
+    data: Array.from(data),
+    extension,
+  });
+}
+
 /**
  * Convert frontend settings to backend format
  */

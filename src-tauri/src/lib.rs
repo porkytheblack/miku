@@ -97,6 +97,7 @@ pub fn run() {
             commands::get_app_version,
             commands::save_session,
             commands::load_session,
+            commands::save_image_asset,
             // Workspace commands
             workspace::get_workspace_info,
             workspace::get_current_workspace,
