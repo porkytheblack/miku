@@ -282,23 +282,25 @@ export default function BlockEditor() {
    */
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLTextAreaElement>) => {
-      const files = getImageFilesFromDrop(e.dataTransfer);
-      const urls = files.length === 0 ? getImageUrlsFromDataTransfer(e.dataTransfer) : [];
-      if (files.length === 0 && urls.length === 0) {
-        setIsDragOver(false);
-        return;
-      }
+      const dt = e.dataTransfer;
+      const hasFiles = dt && Array.from(dt.types || []).includes('Files');
+      const hasUri = dt && Array.from(dt.types || []).includes('text/uri-list');
 
-      e.preventDefault();
+      // `dragover` accepted this drop if either types array was present, so
+      // we must prevent default on drop too — otherwise the browser falls
+      // back to its native file/URL drop behaviour (which on some platforms
+      // navigates the webview).
+      if (hasFiles || hasUri) {
+        e.preventDefault();
+      }
       setIsDragOver(false);
 
-      // Try to place the caret at the drop position.
-      const textarea = textareaRef.current;
-      if (textarea) {
-        textarea.focus();
-        // `caretPositionFromPoint` / `caretRangeFromPoint` don't work on
-        // textareas in every browser, so we just leave the caret where it is.
-      }
+      const files = getImageFilesFromDrop(dt);
+      const urls = files.length === 0 ? getImageUrlsFromDataTransfer(dt) : [];
+      if (files.length === 0 && urls.length === 0) return;
+
+      // Put focus back on the textarea so the caret is visible after drop.
+      textareaRef.current?.focus();
 
       if (files.length > 0) {
         void insertImageFiles(files);
