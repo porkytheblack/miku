@@ -297,6 +297,81 @@ pub async fn load_session() -> Result<Option<SessionState>, MikuError> {
     }
 }
 
+// ============================================
+// Image assets
+// ============================================
+
+/// Result returned after saving an image asset.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SavedImageAsset {
+    /// Absolute path on disk where the image was written.
+    pub absolute_path: String,
+    /// Markdown-friendly path to embed in the document. Relative when a
+    /// document path is known, otherwise the absolute path.
+    pub markdown_path: String,
+}
+
+/// Save raw image bytes to disk.
+///
+/// When `document_path` is provided, the image is written to a sibling
+/// `assets/` folder next to the document and the returned `markdown_path`
+/// is a forward-slash relative path. When no document path is provided,
+/// the image is written inside the app data directory under `assets/`
+/// and the absolute path is returned.
+#[tauri::command]
+pub async fn save_image_asset(
+    document_path: Option<String>,
+    data: Vec<u8>,
+    extension: String,
+) -> Result<SavedImageAsset, MikuError> {
+    // Sanitize extension - strip leading dot, limit chars
+    let ext = extension
+        .trim()
+        .trim_start_matches('.')
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_lowercase();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    // Generate unique filename using millis timestamp
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let filename = format!("image-{}.{}", ts, ext);
+
+    // Determine target directory
+    let (assets_dir, markdown_path) = match document_path.as_deref() {
+        Some(doc_path) if !doc_path.is_empty() => {
+            let doc = std::path::Path::new(doc_path);
+            let parent = doc
+                .parent()
+                .ok_or_else(|| MikuError::Path("Document has no parent directory".to_string()))?;
+            let assets = parent.join("assets");
+            let md = format!("assets/{}", filename);
+            (assets, md)
+        }
+        _ => {
+            let assets = get_app_data_dir()?.join("assets");
+            let full = assets.join(&filename);
+            let md = full.to_string_lossy().to_string();
+            (assets, md)
+        }
+    };
+
+    tokio::fs::create_dir_all(&assets_dir).await?;
+
+    let full_path = assets_dir.join(&filename);
+    tokio::fs::write(&full_path, &data).await?;
+
+    Ok(SavedImageAsset {
+        absolute_path: full_path.to_string_lossy().to_string(),
+        markdown_path,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,6 +9,14 @@ import { adjustSuggestions, validateSuggestionPositions } from '@/lib/textPositi
 import { handleSmartFormatting, handleCharacterInput, shouldAutoPair } from '@/lib/markdown/SmartFormatting';
 import { toggleFormatting } from '@/lib/markdown/markdownUtils';
 import { highlightMarkdownSyntax } from '@/components/markdown/MarkdownSyntaxHighlighter';
+import ImagePreviewLayer from '@/components/markdown/ImagePreviewLayer';
+import {
+  buildMarkdownForImage,
+  getImageFilesFromClipboard,
+  getImageFilesFromDrop,
+  getImageUrlsFromDataTransfer,
+  persistImageFile,
+} from '@/lib/markdown/imageInsertion';
 import { useKeyboardSounds } from '@/hooks/useKeyboardSounds';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -75,6 +83,8 @@ export default function BlockEditor() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [acceptedRevisions, setAcceptedRevisions] = useState<AcceptedRevision[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Slash command state
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -192,6 +202,131 @@ export default function BlockEditor() {
     if (textareaRef.current && highlightRef.current) {
       highlightRef.current.scrollTop = textareaRef.current.scrollTop;
       highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+      setScrollTop(textareaRef.current.scrollTop);
+    }
+  }, []);
+
+  // Derive the active document's path (used when saving pasted/dropped images).
+  const activeDocumentPath = useMemo(() => {
+    const doc = openDocuments.find((d) => d.id === activeDocumentId);
+    return doc?.path ?? null;
+  }, [openDocuments, activeDocumentId]);
+
+  /**
+   * Insert text at the current cursor position and move the caret to the
+   * end of the inserted text. Works even when the textarea isn't focused.
+   */
+  const insertAtCursor = useCallback(
+    (text: string) => {
+      const textarea = textareaRef.current;
+      const current = contentRef.current;
+      let start = current.length;
+      let end = current.length;
+      if (textarea) {
+        start = textarea.selectionStart ?? current.length;
+        end = textarea.selectionEnd ?? start;
+      }
+      const next = current.slice(0, start) + text + current.slice(end);
+      setContent(next);
+      const caret = start + text.length;
+      // Restore focus + caret after React applies the update.
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(caret, caret);
+        }
+      }, 0);
+    },
+    [setContent],
+  );
+
+  /**
+   * Save image files to disk (via Tauri) and insert markdown references at
+   * the cursor.
+   */
+  const insertImageFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const snippets: string[] = [];
+      for (const file of files) {
+        try {
+          const image = await persistImageFile(file, activeDocumentPath);
+          snippets.push(buildMarkdownForImage(image));
+        } catch (err) {
+          console.error('Failed to save pasted/dropped image', err);
+        }
+      }
+      if (snippets.length === 0) return;
+      // Separate with blank lines so each image sits on its own paragraph.
+      insertAtCursor(`\n\n${snippets.join('\n\n')}\n\n`);
+    },
+    [activeDocumentPath, insertAtCursor],
+  );
+
+  /**
+   * Handle pasting images from the clipboard.
+   */
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = getImageFilesFromClipboard(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      void insertImageFiles(files);
+    },
+    [insertImageFiles],
+  );
+
+  /**
+   * Handle dragging images onto the editor. Supports both OS file drags and
+   * dragged image URLs from a browser.
+   */
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLTextAreaElement>) => {
+      const files = getImageFilesFromDrop(e.dataTransfer);
+      const urls = files.length === 0 ? getImageUrlsFromDataTransfer(e.dataTransfer) : [];
+      if (files.length === 0 && urls.length === 0) {
+        setIsDragOver(false);
+        return;
+      }
+
+      e.preventDefault();
+      setIsDragOver(false);
+
+      // Try to place the caret at the drop position.
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        // `caretPositionFromPoint` / `caretRangeFromPoint` don't work on
+        // textareas in every browser, so we just leave the caret where it is.
+      }
+
+      if (files.length > 0) {
+        void insertImageFiles(files);
+      } else {
+        const snippets = urls.map((url) =>
+          buildMarkdownForImage({ alt: 'image', src: url }),
+        );
+        insertAtCursor(`\n\n${snippets.join('\n\n')}\n\n`);
+      }
+    },
+    [insertImageFiles, insertAtCursor],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const hasFiles = Array.from(dt.types || []).includes('Files');
+    const hasUri = Array.from(dt.types || []).includes('text/uri-list');
+    if (!hasFiles && !hasUri) return;
+    e.preventDefault();
+    dt.dropEffect = 'copy';
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    // Only clear when the drag actually leaves the textarea, not a child.
+    if (e.currentTarget === e.target) {
+      setIsDragOver(false);
     }
   }, []);
 
@@ -1030,6 +1165,10 @@ export default function BlockEditor() {
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               onScroll={syncScroll}
+              onPaste={handlePaste}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
               className="editor-textarea"
               style={{
                 ...sharedTextStyles,
@@ -1043,7 +1182,8 @@ export default function BlockEditor() {
                 color: 'var(--text-primary)',
                 caretColor: 'var(--accent-primary)',
                 zIndex: 1,
-                outline: 'none',
+                outline: isDragOver ? '2px dashed var(--accent-primary)' : 'none',
+                outlineOffset: isDragOver ? '-4px' : 0,
                 resize: 'none',
               }}
               placeholder={settings.reviewMode === 'manual'
@@ -1065,6 +1205,15 @@ Tips:
 - Highlighted text shows suggestions - click to see details`}
               spellCheck={false}
               aria-label="Writing editor"
+            />
+
+            {/* Inline image preview layer - renders thumbnails in the right gutter
+                aligned with their image markdown syntax while editing. */}
+            <ImagePreviewLayer
+              content={content}
+              documentPath={activeDocumentPath}
+              scrollTop={scrollTop}
+              lineHeightPx={settings.fontSize * settings.lineHeight}
             />
 
             {/* Highlight layer - on top but with pointer-events: none except for marks */}
