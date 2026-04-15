@@ -57,6 +57,41 @@
         "description": "Markdown Document",
         "role": "Editor",
         "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["miku"],
+        "name": "Miku Agent Config",
+        "description": "Miku Agent Configuration",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-env"],
+        "name": "Miku Environment",
+        "description": "Miku Environment Variables",
+        "role": "Editor",
+        "mimeType": "text/plain"
+      },
+      {
+        "ext": ["miku-kanban"],
+        "name": "Miku Kanban Board",
+        "description": "Miku Kanban Board",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-docs"],
+        "name": "Miku Docs",
+        "description": "Miku Documentation Set",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-chat"],
+        "name": "Miku Agent Chat",
+        "description": "Miku Agent Chat Transcript",
+        "role": "Editor",
+        "mimeType": "application/json"
       }
     ],
     "macOS": {
