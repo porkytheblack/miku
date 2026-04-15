@@ -50,6 +50,50 @@
     "category": "Productivity",
     "shortDescription": "A markdown editor that treats AI as a tool, not a collaborator",
     "longDescription": "Miku is a markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer. Unlike conventional AI writing tools that interrupt your flow with real-time suggestions and autocomplete, Miku stays silent while you write and only surfaces feedback after you've finished a thought.",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdown", "mkd", "mdwn"],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["miku"],
+        "name": "Miku Agent Config",
+        "description": "Miku Agent Configuration",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-env"],
+        "name": "Miku Environment",
+        "description": "Miku Environment Variables",
+        "role": "Editor",
+        "mimeType": "text/plain"
+      },
+      {
+        "ext": ["miku-kanban"],
+        "name": "Miku Kanban Board",
+        "description": "Miku Kanban Board",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-docs"],
+        "name": "Miku Docs",
+        "description": "Miku Documentation Set",
+        "role": "Editor",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["miku-chat"],
+        "name": "Miku Agent Chat",
+        "description": "Miku Agent Chat Transcript",
+        "role": "Editor",
+        "mimeType": "application/json"
+      }
+    ],
     "macOS": {
       "minimumSystemVersion": "10.15"
     },

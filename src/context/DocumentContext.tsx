@@ -261,14 +261,27 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       let filePath = path;
 
       if (!filePath) {
-        // Use Tauri's dialog to pick a file
+        // Use Tauri's dialog to pick a file. The "All Miku Files" filter
+        // is listed first so users can open any Miku-native format
+        // (markdown plus the .miku-* family) from a single dropdown entry.
         const { open } = await import('@tauri-apps/plugin-dialog');
         const selected = await open({
           multiple: false,
-          filters: [{
-            name: 'Markdown',
-            extensions: ['md', 'markdown', 'mdown'],
-          }],
+          filters: [
+            {
+              name: 'All Miku Files',
+              extensions: [
+                'md', 'markdown', 'mdown',
+                'miku', 'miku-env', 'miku-kanban', 'miku-docs', 'miku-chat',
+              ],
+            },
+            { name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] },
+            { name: 'Miku Agent Config', extensions: ['miku'] },
+            { name: 'Miku Environment', extensions: ['miku-env'] },
+            { name: 'Miku Kanban', extensions: ['miku-kanban'] },
+            { name: 'Miku Docs', extensions: ['miku-docs'] },
+            { name: 'Miku Agent Chat', extensions: ['miku-chat'] },
+          ],
         });
 
         if (!selected) return;
@@ -302,6 +315,49 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       console.error('Failed to open file:', error);
     }
   }, [openDocuments, loadRecentFiles]);
+
+  // Listen for OS-driven file-open events (file association double-click,
+  // `open foo.md` from the shell, etc.). Rust emits `miku://open-file` with
+  // an absolute path; we route it through openDocument so it lands in a tab
+  // exactly like the dialog flow.
+  //
+  // We keep a ref to the latest openDocument so the listener is registered
+  // once on mount and doesn't churn whenever openDocuments changes.
+  const openDocumentRef = useRef(openDocument);
+  useEffect(() => {
+    openDocumentRef.current = openDocument;
+  }, [openDocument]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const stop = await listen<string>('miku://open-file', (event) => {
+          const path = event.payload;
+          if (typeof path === 'string' && path.length > 0) {
+            void openDocumentRef.current(path);
+          }
+        });
+        if (cancelled) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      } catch (err) {
+        console.error('Failed to subscribe to file-open events:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const saveDocument = useCallback(async (path?: string) => {
     if (!activeDocument) return;
