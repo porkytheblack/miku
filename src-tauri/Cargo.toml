@@ -30,3 +30,10 @@ thiserror = "1.0"
 dirs = "5.0"
 tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread", "process", "io-util"] }
 which = "7"
+
+# Used so that double-clicking a .md file in the OS routes the path into the
+# already-running Miku instance instead of spawning a duplicate. macOS
+# delivers file-open events through `RunEvent::Opened`, so the plugin is
+# only needed on Windows and Linux.
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"

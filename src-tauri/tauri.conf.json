@@ -42,6 +42,15 @@
     "category": "Productivity",
     "shortDescription": "A markdown editor that treats AI as a tool, not a collaborator",
     "longDescription": "Miku is a markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer. Unlike conventional AI writing tools that interrupt your flow with real-time suggestions and autocomplete, Miku stays silent while you write and only surfaces feedback after you've finished a thought.",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdown", "mkd", "mdwn"],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      }
+    ],
     "macOS": {
       "minimumSystemVersion": "10.15"
     },
