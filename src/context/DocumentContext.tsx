@@ -261,14 +261,27 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       let filePath = path;
 
       if (!filePath) {
-        // Use Tauri's dialog to pick a file
+        // Use Tauri's dialog to pick a file. The "All Miku Files" filter
+        // is listed first so users can open any Miku-native format
+        // (markdown plus the .miku-* family) from a single dropdown entry.
         const { open } = await import('@tauri-apps/plugin-dialog');
         const selected = await open({
           multiple: false,
-          filters: [{
-            name: 'Markdown',
-            extensions: ['md', 'markdown', 'mdown'],
-          }],
+          filters: [
+            {
+              name: 'All Miku Files',
+              extensions: [
+                'md', 'markdown', 'mdown',
+                'miku', 'miku-env', 'miku-kanban', 'miku-docs', 'miku-chat',
+              ],
+            },
+            { name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] },
+            { name: 'Miku Agent Config', extensions: ['miku'] },
+            { name: 'Miku Environment', extensions: ['miku-env'] },
+            { name: 'Miku Kanban', extensions: ['miku-kanban'] },
+            { name: 'Miku Docs', extensions: ['miku-docs'] },
+            { name: 'Miku Agent Chat', extensions: ['miku-chat'] },
+          ],
         });
 
         if (!selected) return;
