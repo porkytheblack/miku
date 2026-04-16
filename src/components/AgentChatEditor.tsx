@@ -1054,7 +1054,7 @@ function ToolCallBody({ toolCall }: { toolCall: AcpToolCallInfo }) {
           <span style={{ color: 'var(--text-tertiary)', userSelect: 'none' }}>$</span>
           <span style={{ color: '#4ade80' }}>{String(input.command || '')}</span>
         </div>
-        {input.description && (
+        {!!input.description && (
           <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
             {String(input.description)}
           </div>
