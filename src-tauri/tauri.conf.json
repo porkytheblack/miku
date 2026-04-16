@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Miku",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.miku.editor",
   "build": {
     "frontendDist": "../out",
@@ -31,7 +31,9 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["**"],
+          "allow": [
+            "**"
+          ],
           "deny": []
         }
       }
@@ -52,42 +54,58 @@
     "longDescription": "Miku is a markdown editor with an AI assistant that behaves like a patient, skilled human editor—not a co-writer. Unlike conventional AI writing tools that interrupt your flow with real-time suggestions and autocomplete, Miku stays silent while you write and only surfaces feedback after you've finished a thought.",
     "fileAssociations": [
       {
-        "ext": ["md", "markdown", "mdown", "mkd", "mdwn"],
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd",
+          "mdwn"
+        ],
         "name": "Markdown Document",
         "description": "Markdown Document",
         "role": "Editor",
         "mimeType": "text/markdown"
       },
       {
-        "ext": ["miku"],
+        "ext": [
+          "miku"
+        ],
         "name": "Miku Agent Config",
         "description": "Miku Agent Configuration",
         "role": "Editor",
         "mimeType": "application/json"
       },
       {
-        "ext": ["miku-env"],
+        "ext": [
+          "miku-env"
+        ],
         "name": "Miku Environment",
         "description": "Miku Environment Variables",
         "role": "Editor",
         "mimeType": "text/plain"
       },
       {
-        "ext": ["miku-kanban"],
+        "ext": [
+          "miku-kanban"
+        ],
         "name": "Miku Kanban Board",
         "description": "Miku Kanban Board",
         "role": "Editor",
         "mimeType": "application/json"
       },
       {
-        "ext": ["miku-docs"],
+        "ext": [
+          "miku-docs"
+        ],
         "name": "Miku Docs",
         "description": "Miku Documentation Set",
         "role": "Editor",
         "mimeType": "application/json"
       },
       {
-        "ext": ["miku-chat"],
+        "ext": [
+          "miku-chat"
+        ],
         "name": "Miku Agent Chat",
         "description": "Miku Agent Chat Transcript",
         "role": "Editor",
