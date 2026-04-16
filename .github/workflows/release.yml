@@ -238,6 +238,17 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
+          # Force tauri-action to invoke the Tauri CLI through npm rather
+          # than auto-detecting `pnpm` from `pnpm-lock.yaml`. CI installs
+          # deps with `npm ci`, and recent macOS/Linux runner images no
+          # longer ship a pre-installed `pnpm` binary. Without this
+          # override, tauri-action's `getRunner` picks `pnpm`, the spawn
+          # fails with ENOENT, and because its `execCommand` uses
+          # `reject: false` and only listens for `exit` (not `error`),
+          # the promise hangs — visible in the log only as the
+          # "Detected unsettled top-level await" warning before the
+          # action exits silently.
+          tauriScript: npm run tauri
           args: --target ${{ matrix.target }}
 
       # -------------------------------------------------------------------------
