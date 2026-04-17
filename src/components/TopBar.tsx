@@ -125,6 +125,7 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
 
   return (
     <div
+      data-tauri-drag-region
       style={{
         position: 'sticky',
         top: 0,
@@ -134,7 +135,9 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
         height: '36px',
         background: 'var(--bg-secondary)',
         borderBottom: '1px solid var(--border-default)',
-        paddingLeft: '8px',
+        // Extra left padding on macOS/Tauri for the traffic-light buttons
+        // when using titleBarStyle: "Overlay".
+        paddingLeft: inTauri ? '78px' : '8px',
         paddingRight: '8px',
         gap: '2px',
         flexShrink: 0,
