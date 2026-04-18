@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useDocument } from '@/context/DocumentContext';
 import { useMiku } from '@/context/MikuContext';
 import { detectFileType } from '@/lib/fileTypes';
-import BlockEditor from './BlockEditor';
+import CodeMirrorEditor from './CodeMirrorEditor';
 import EnvEditor from './EnvEditor';
 import KanbanEditor from './KanbanEditor';
 import DocsEditor from './DocsEditor';
@@ -100,8 +100,8 @@ export default function EditorSwitcher() {
       );
     }
 
-    // Default to BlockEditor for markdown files
-    return <BlockEditor key={editorKey} />;
+    // Default to CodeMirrorEditor for markdown files
+    return <CodeMirrorEditor key={editorKey} />;
   };
 
   return (
