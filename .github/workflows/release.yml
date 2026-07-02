@@ -36,14 +36,13 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-            VERSION="${VERSION#v}"  # Strip 'v' prefix if provided
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
           else
             echo "No version specified and not triggered by tag"
             exit 1
           fi
+          VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Releasing version: $VERSION"
 
@@ -58,12 +57,9 @@ jobs:
             NOTES=$(git log --pretty=format:"- %s" -10)
           fi
 
-          # Output using heredoc delimiter to preserve newlines
-          {
-            echo "notes<<RELEASE_NOTES_EOF"
-            echo "$NOTES"
-            echo "RELEASE_NOTES_EOF"
-          } >> $GITHUB_OUTPUT
+          # Escape for JSON
+          NOTES=$(echo "$NOTES" | jq -Rs .)
+          echo "notes=$NOTES" >> $GITHUB_OUTPUT
 
   # =============================================================================
   # Job 2: Build for all platforms
@@ -162,11 +158,14 @@ jobs:
       # -------------------------------------------------------------------------
       # Build tools setup
       # -------------------------------------------------------------------------
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -179,7 +178,7 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # -------------------------------------------------------------------------
       # Update version in configuration files
@@ -224,7 +223,7 @@ jobs:
       # Build Tauri app with signing
       # -------------------------------------------------------------------------
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tauri updater signing
@@ -238,18 +237,11 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          # Force tauri-action to invoke the Tauri CLI through npm rather
-          # than auto-detecting `pnpm` from `pnpm-lock.yaml`. CI installs
-          # deps with `npm ci`, and recent macOS/Linux runner images no
-          # longer ship a pre-installed `pnpm` binary. Without this
-          # override, tauri-action's `getRunner` picks `pnpm`, the spawn
-          # fails with ENOENT, and because its `execCommand` uses
-          # `reject: false` and only listens for `exit` (not `error`),
-          # the promise hangs — visible in the log only as the
-          # "Detected unsettled top-level await" warning before the
-          # action exits silently.
-          tauriScript: npm run tauri
           args: --target ${{ matrix.target }}
+          # Don't create GitHub release - we handle that separately
+          tagName: ""
+          releaseName: ""
+          tauriScript: pnpm tauri
 
       # -------------------------------------------------------------------------
       # Collect and upload build artifacts
@@ -305,7 +297,7 @@ jobs:
 
               # Sign the tarball using Tauri signer CLI
               echo "Signing the tarball..."
-              # Use npx to run tauri CLI (installed via npm ci)
+              # Use npx to run tauri CLI (installed via pnpm install)
               if [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
                 npx --yes @tauri-apps/cli signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TARBALL"
               else
@@ -358,58 +350,45 @@ jobs:
           PLATFORM="${{ matrix.os_name }}-${{ matrix.arch }}"
 
           if [[ "${{ matrix.os_name }}" == "darwin" ]]; then
-            # Find DMG installer
-            DMG_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
-            DMG_FILE=$(find "$DMG_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
-            if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/dmg"
+            # Find .dmg installer
+            DMG=$(find "$BUNDLE_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
+            if [ -n "$DMG" ]; then
               INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}.dmg"
-              cp "$DMG_FILE" "installers/$INSTALLER_NAME"
-              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
-              echo "Found macOS installer: $INSTALLER_NAME"
+              cp "$DMG" "installers/$INSTALLER_NAME"
+              echo "Installer: $INSTALLER_NAME"
             else
-              echo "No DMG installer found (optional)"
+              echo "No .dmg installer found (optional)"
             fi
-
           elif [[ "${{ matrix.os_name }}" == "windows" ]]; then
-            # Find NSIS installer (.exe) - preferred over MSI for installers
-            NSIS_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
-            NSIS_FILE=$(find "$NSIS_DIR" -name "*.exe" -type f 2>/dev/null | head -1)
-            if [ -n "$NSIS_FILE" ] && [ -f "$NSIS_FILE" ]; then
-              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.exe"
-              cp "$NSIS_FILE" "installers/$INSTALLER_NAME"
-              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
-              echo "Found Windows NSIS installer: $INSTALLER_NAME"
-            else
-              # Fallback to MSI as installer
-              MSI_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
-              MSI_FILE=$(find "$MSI_DIR" -name "*.msi" -type f 2>/dev/null | head -1)
-              if [ -n "$MSI_FILE" ] && [ -f "$MSI_FILE" ]; then
-                INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.msi"
-                cp "$MSI_FILE" "installers/$INSTALLER_NAME"
-                echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
-                echo "Found Windows MSI installer: $INSTALLER_NAME"
-              else
-                echo "No Windows installer found (optional)"
-              fi
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/msi"
+            # Find .msi installer (already in artifacts, also copy to installers)
+            MSI=$(find "$BUNDLE_DIR" -name "*.msi" -not -name "*.sig" -type f 2>/dev/null | head -1)
+            if [ -n "$MSI" ]; then
+              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.msi"
+              cp "$MSI" "installers/$INSTALLER_NAME"
+              echo "Installer: $INSTALLER_NAME"
             fi
-
+            # Also check for NSIS .exe installer
+            NSIS_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+            EXE=$(find "$NSIS_DIR" -name "*-setup.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$EXE" ]; then
+              INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}_setup.exe"
+              cp "$EXE" "installers/$INSTALLER_NAME"
+              echo "Installer: $INSTALLER_NAME"
+            fi
           elif [[ "${{ matrix.os_name }}" == "linux" ]]; then
-            # Use the raw AppImage as the installer (not the tar.gz)
-            APPIMAGE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
-            APPIMAGE_FILE=$(find "$APPIMAGE_DIR" -name "*.AppImage" -not -name "*.sig" -type f 2>/dev/null | head -1)
-            if [ -n "$APPIMAGE_FILE" ] && [ -f "$APPIMAGE_FILE" ]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/appimage"
+            # Find AppImage installer (not the tar.gz)
+            APPIMAGE=$(find "$BUNDLE_DIR" -name "*.AppImage" -not -name "*.sig" -not -name "*.tar.gz" -type f 2>/dev/null | head -1)
+            if [ -n "$APPIMAGE" ]; then
               INSTALLER_NAME="${{ env.APP_NAME }}_${VERSION}_${PLATFORM}.AppImage"
-              cp "$APPIMAGE_FILE" "installers/$INSTALLER_NAME"
-              echo "INSTALLER_NAME=$INSTALLER_NAME" >> $GITHUB_ENV
-              echo "Found Linux AppImage installer: $INSTALLER_NAME"
+              cp "$APPIMAGE" "installers/$INSTALLER_NAME"
+              echo "Installer: $INSTALLER_NAME"
             else
               echo "No AppImage installer found (optional)"
             fi
           fi
-
-          # List installers found
-          echo "Installers collected:"
-          ls -la installers/ 2>/dev/null || echo "No installers"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -441,9 +420,9 @@ jobs:
   # =============================================================================
   release:
     needs: [prepare, build]
-    runs-on: ubuntu-latest
     permissions:
       contents: write
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -510,23 +489,18 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           BUCKET="${{ secrets.R2_BUCKET_NAME }}"
 
-          # Upload each installer to a separate path
-          echo "=== Uploading Installers ==="
-          if [ -d "installers" ] && [ "$(ls -A installers 2>/dev/null)" ]; then
-            for file in installers/*; do
-              if [ -f "$file" ]; then
-                FILENAME=$(basename "$file")
-                R2_KEY="${{ env.APP_SLUG }}/installers/$VERSION/$FILENAME"
+          echo "=== Uploading Installer Files ==="
+          for file in installers/*; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              R2_KEY="${{ env.APP_SLUG }}/installers/$VERSION/$FILENAME"
 
-                echo "Uploading installer $FILENAME to r2:$BUCKET/$R2_KEY"
-                rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
+              echo "Uploading installer $FILENAME to r2:$BUCKET/$R2_KEY"
+              rclone copyto "$file" "r2:$BUCKET/$R2_KEY"
 
-                echo "Uploaded installer: $R2_KEY"
-              fi
-            done
-          else
-            echo "No installers to upload"
-          fi
+              echo "Uploaded: $R2_KEY"
+            fi
+          done
 
       - name: Register release with Oasis
         env:
@@ -677,6 +651,7 @@ jobs:
 
             **Windows:**
             - [Windows (64-bit) Installer](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64_setup.exe)
+            - [Windows (64-bit) .msi](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_windows-x86_64_setup.msi)
 
             **Linux:**
             - [AppImage (64-bit)](${{ secrets.R2_PUBLIC_URL }}/${{ env.APP_SLUG }}/installers/${{ needs.prepare.outputs.version }}/${{ env.APP_NAME }}_${{ needs.prepare.outputs.version }}_linux-x86_64.AppImage)
