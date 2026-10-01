@@ -228,3 +228,28 @@ body {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+/* A permanent way back to the folder overview, alongside document tabs. */
+.home-nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-right: 6px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.home-nav-button:hover,
+.home-nav-button[aria-current="page"] {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.home-nav-button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}

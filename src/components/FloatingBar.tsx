@@ -11,7 +11,7 @@ interface FloatingBarProps {
 
 export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser }: FloatingBarProps) {
   const { state, requestReview } = useMiku();
-  const { openDocument, saveDocument, newDoc } = useDocument();
+  const { openDocument, saveDocument, newDoc, isHome } = useDocument();
   const [isHovered, setIsHovered] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
@@ -40,12 +40,12 @@ export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser 
         newDoc();
       }
       // Cmd/Ctrl + O: Open document
-      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'o') {
         e.preventDefault();
         openDocument();
       }
       // Cmd/Ctrl + S: Save document
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if ((e.metaKey || e.ctrlKey) && !isHome && e.key === 's') {
         e.preventDefault();
         saveDocument();
       }
@@ -53,7 +53,7 @@ export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [newDoc, openDocument, saveDocument]);
+  }, [newDoc, openDocument, saveDocument, isHome]);
 
   const isVisible = isHovered || state.status !== 'idle' || showSettings;
 
@@ -71,6 +71,8 @@ export default function FloatingBar({ onToggleFileBrowser: _onToggleFileBrowser 
   const handleTogglePreview = useCallback(() => {
     window.dispatchEvent(new Event('miku:togglePreview'));
   }, []);
+
+  if (isHome) return null;
 
   return (
     <>

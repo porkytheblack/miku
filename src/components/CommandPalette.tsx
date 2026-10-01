@@ -106,7 +106,7 @@ export default function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const { openDocument, saveDocument, newDoc } = useDocument();
+  const { openDocument, saveDocument, newDoc, showHome } = useDocument();
   const { selectWorkspace, refreshFiles, workspace } = useWorkspace();
   const { requestReview } = useMiku();
   const inTauri = isTauri();
@@ -139,6 +139,13 @@ export default function CommandPalette({
   // Define all available commands
   const commands: Command[] = useMemo(() => {
     const cmds: Command[] = [
+      {
+        id: 'view.home',
+        label: 'Go Home',
+        keywords: ['overview', 'folders', 'files'],
+        category: 'view',
+        action: showHome,
+      },
       // File commands
       {
         id: 'file.new',
@@ -499,6 +506,7 @@ export default function CommandPalette({
   }, [
     inTauri,
     newDoc,
+    showHome,
     openDocument,
     saveDocument,
     selectWorkspace,

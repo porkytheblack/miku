@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useDocument } from '@/context/DocumentContext';
 import { isTauri } from '@/lib/tauri';
 import { getFileTypeFromPath } from '@/lib/fileTypes';
 import type { FileType } from '@/types';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+
+const subscribe = () => () => {};
 
 interface TopBarProps {
   onToggleFileBrowser?: () => void;
@@ -112,16 +114,8 @@ function TabIcon({ fileType, isActive }: { fileType: FileType; isActive: boolean
 }
 
 export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, onToggleSettings }: TopBarProps) {
-  const { openDocuments, activeDocumentId, switchToDocument, closeDocument, newDoc } = useDocument();
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Only check isTauri after mount to avoid hydration mismatch
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Only show Tauri-specific features after mount
-  const inTauri = isMounted && isTauri();
+  const { openDocuments, activeDocumentId, switchToDocument, closeDocument, newDoc, isHome, showHome } = useDocument();
+  const inTauri = useSyncExternalStore(subscribe, isTauri, () => false);
 
   return (
     <div
@@ -143,6 +137,18 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
         flexShrink: 0,
       }}
     >
+      <button
+        type="button"
+        onClick={showHome}
+        aria-current={isHome ? 'page' : undefined}
+        className="home-nav-button"
+        title="Home"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path d="m2 7 6-5 6 5v7H9.5V9h-3v5H2V7Z" strokeLinejoin="round" />
+        </svg>
+        Home
+      </button>
       {/* Workspace switcher (left side, only in Tauri) */}
       {inTauri && (
         <>
@@ -174,7 +180,7 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
         }}
       >
         {openDocuments.map((doc) => {
-          const isActive = doc.id === activeDocumentId;
+          const isActive = !isHome && doc.id === activeDocumentId;
           const fileType = doc.path ? getFileTypeFromPath(doc.path) : 'markdown';
           const displayName = getDisplayName(doc.path);
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { isTauri, safeTauriCall } from '@/lib/tauri';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { isTauri } from '@/lib/tauri';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface WorkspaceFile {
@@ -22,6 +22,7 @@ interface WorkspaceState {
   envFiles: WorkspaceFile[];
   recentWorkspaces: Workspace[];
   isLoading: boolean;
+  error: string | null;
 }
 
 interface WorkspaceContextType {
@@ -37,6 +38,12 @@ interface WorkspaceContextType {
   hasWorkspace: boolean;
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Please check that the folder is available and try again.';
+}
+
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
@@ -45,49 +52,148 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     files: [],
     envFiles: [],
     recentWorkspaces: [],
-    isLoading: false,
+    isLoading: true,
+    error: null,
   });
+  const navigationVersion = useRef(0);
+  const opening = useRef<symbol | null>(null);
+  const pendingLoads = useRef(new Set<symbol>());
+  const latestFileRefresh = useRef<symbol | null>(null);
+  const latestEnvRefresh = useRef<symbol | null>(null);
 
-  // Load saved workspace on mount
+  const startLoading = useCallback(() => {
+    const request = Symbol();
+    pendingLoads.current.add(request);
+    setWorkspace(prev => ({ ...prev, isLoading: true }));
+    return request;
+  }, []);
+
+  const finishLoading = useCallback((request: symbol) => {
+    // Navigation discards older requests, including their loading indicators.
+    if (!pendingLoads.current.delete(request)) return;
+    const isLoading = pendingLoads.current.size > 0;
+    setWorkspace(prev => ({ ...prev, isLoading }));
+  }, []);
+
+  // Load saved state atomically, without letting a late startup response replace
+  // a folder the user has already chosen.
   useEffect(() => {
+    if (!isTauri()) {
+      setWorkspace(prev => ({ ...prev, isLoading: false }));
+      return;
+    }
+
+    const version = navigationVersion.current;
+    const request = startLoading();
+    const loads = pendingLoads.current;
+    let cancelled = false;
+
     const loadSavedWorkspace = async () => {
-      if (!isTauri()) return;
+      const [saved, recent] = await Promise.allSettled([
+        (async () => {
+          const currentWorkspace = await invoke<Workspace | null>('get_current_workspace');
+          if (!currentWorkspace) return null;
+          const [files, envFiles] = await Promise.all([
+            invoke<WorkspaceFile[]>('list_workspace_files', { workspacePath: currentWorkspace.path }),
+            invoke<WorkspaceFile[]>('list_env_files', { workspacePath: currentWorkspace.path }),
+          ]);
+          return { currentWorkspace, files, envFiles };
+        })(),
+        invoke<Workspace[]>('get_recent_workspaces'),
+      ]);
 
+      if (cancelled || navigationVersion.current !== version) return;
+      const errors: string[] = [];
+      if (saved.status === 'rejected') {
+        console.error('Failed to load workspace:', saved.reason);
+        errors.push(`Could not load the saved folder: ${errorMessage(saved.reason)}`);
+      }
+      if (recent.status === 'rejected') {
+        console.error('Failed to load recent workspaces:', recent.reason);
+        errors.push(`Could not load recent folders: ${errorMessage(recent.reason)}`);
+      }
+      setWorkspace(prev => ({
+        ...prev,
+        ...(saved.status === 'fulfilled' && saved.value ? saved.value : {}),
+        ...(recent.status === 'fulfilled' ? { recentWorkspaces: recent.value } : {}),
+        error: errors.length ? errors.join(' ') : null,
+      }));
+      finishLoading(request);
+    };
+
+    void loadSavedWorkspace();
+    return () => {
+      cancelled = true;
+      navigationVersion.current += 1;
+      loads.clear();
+      opening.current = null;
+    };
+  }, [startLoading, finishLoading]);
+
+  const openWorkspaceInternal = useCallback(async (workspacePath: string) => {
+    const version = ++navigationVersion.current;
+    pendingLoads.current.clear();
+    const request = startLoading();
+    setWorkspace(prev => ({ ...prev, error: null }));
+
+    try {
+      // Listing first validates that the folder exists and is readable. A failed
+      // open must not replace the last good workspace in the backend or the UI.
+      const [workspaceInfo, files, envFiles] = await Promise.all([
+        invoke<Workspace>('get_workspace_info', { path: workspacePath }),
+        invoke<WorkspaceFile[]>('list_workspace_files', { workspacePath }),
+        invoke<WorkspaceFile[]>('list_env_files', { workspacePath }),
+      ]);
+      if (navigationVersion.current !== version) return;
+      await invoke('set_workspace', { path: workspacePath });
+      if (navigationVersion.current !== version) return;
+
+      setWorkspace(prev => ({
+        ...prev,
+        currentWorkspace: workspaceInfo,
+        files,
+        envFiles,
+        recentWorkspaces: [
+          workspaceInfo,
+          ...prev.recentWorkspaces.filter(item => item.path !== workspacePath),
+        ].slice(0, 10),
+      }));
+
+      // Once persistence succeeds the folder is open. A history-read failure
+      // must not leave the UI pointing at the previous backend workspace.
       try {
-        const savedWorkspace = await invoke<Workspace | null>('get_current_workspace');
         const recentWorkspaces = await invoke<Workspace[]>('get_recent_workspaces');
-
-        if (savedWorkspace) {
-          setWorkspace(prev => ({
-            ...prev,
-            currentWorkspace: savedWorkspace,
-            recentWorkspaces,
-          }));
-
-          // Load files for the workspace
-          const files = await invoke<WorkspaceFile[]>('list_workspace_files', {
-            workspacePath: savedWorkspace.path
-          });
-          const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
-            workspacePath: savedWorkspace.path
-          });
-          setWorkspace(prev => ({ ...prev, files, envFiles }));
-        } else {
+        if (navigationVersion.current === version) {
           setWorkspace(prev => ({ ...prev, recentWorkspaces }));
         }
       } catch (error) {
-        console.error('Failed to load workspace:', error);
+        if (navigationVersion.current === version) {
+          console.error('Failed to load recent workspaces:', error);
+          setWorkspace(prev => ({
+            ...prev,
+            error: `Folder opened, but recent folders could not be refreshed: ${errorMessage(error)}`,
+          }));
+        }
       }
-    };
-
-    loadSavedWorkspace();
-  }, []);
+    } catch (error) {
+      if (navigationVersion.current === version) {
+        console.error('Failed to open workspace:', error);
+        setWorkspace(prev => ({
+          ...prev,
+          error: `Could not open folder: ${errorMessage(error)}`,
+        }));
+      }
+    } finally {
+      finishLoading(request);
+    }
+  }, [startLoading, finishLoading]);
 
   const selectWorkspace = useCallback(async () => {
-    if (!isTauri()) {
-      console.log('Workspace selection not available in browser mode');
-      return;
-    }
+    if (!isTauri() || opening.current) return;
+    const selection = Symbol();
+    opening.current = selection;
+    const version = navigationVersion.current;
+    const request = startLoading();
 
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
@@ -96,82 +202,85 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         multiple: false,
         title: 'Select Workspace Folder',
       });
-
-      if (!selected) return;
-
-      const workspacePath = selected as string;
-      await openWorkspaceInternal(workspacePath);
+      // Cancellation preserves the current folder, files, history, and error.
+      if (typeof selected !== 'string' || navigationVersion.current !== version) return;
+      await openWorkspaceInternal(selected);
     } catch (error) {
-      console.error('Failed to select workspace:', error);
+      if (navigationVersion.current === version) {
+        console.error('Failed to select workspace:', error);
+        setWorkspace(prev => ({
+          ...prev,
+          error: `Could not select a folder: ${errorMessage(error)}`,
+        }));
+      }
+    } finally {
+      if (opening.current === selection) opening.current = null;
+      finishLoading(request);
     }
-  }, []);
-
-  const openWorkspaceInternal = async (workspacePath: string) => {
-    setWorkspace(prev => ({ ...prev, isLoading: true }));
-
-    try {
-      // Save workspace to backend
-      await invoke('set_workspace', { path: workspacePath });
-
-      // Get workspace info
-      const workspaceInfo = await invoke<Workspace>('get_workspace_info', { path: workspacePath });
-
-      // Load files
-      const files = await invoke<WorkspaceFile[]>('list_workspace_files', {
-        workspacePath
-      });
-
-      // Load env files
-      const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
-        workspacePath
-      });
-
-      // Get recent workspaces
-      const recentWorkspaces = await invoke<Workspace[]>('get_recent_workspaces');
-
-      setWorkspace({
-        currentWorkspace: workspaceInfo,
-        files,
-        envFiles,
-        recentWorkspaces,
-        isLoading: false,
-      });
-    } catch (error) {
-      console.error('Failed to open workspace:', error);
-      setWorkspace(prev => ({ ...prev, isLoading: false }));
-    }
-  };
+  }, [openWorkspaceInternal, startLoading, finishLoading]);
 
   const openWorkspace = useCallback(async (path: string) => {
-    if (!isTauri()) return;
-    await openWorkspaceInternal(path);
-  }, []);
+    if (!isTauri() || opening.current) return;
+    const selection = Symbol();
+    opening.current = selection;
+    try {
+      await openWorkspaceInternal(path);
+    } finally {
+      if (opening.current === selection) opening.current = null;
+    }
+  }, [openWorkspaceInternal]);
 
   const refreshFiles = useCallback(async () => {
-    if (!isTauri() || !workspace.currentWorkspace) return;
+    if (!isTauri() || !workspace.currentWorkspace || opening.current) return;
+    const workspacePath = workspace.currentWorkspace.path;
+    const version = navigationVersion.current;
+    const request = startLoading();
+    latestFileRefresh.current = request;
+    setWorkspace(prev => ({ ...prev, error: null }));
+    const isCurrent = () => navigationVersion.current === version && latestFileRefresh.current === request;
 
     try {
-      const files = await invoke<WorkspaceFile[]>('list_workspace_files', {
-        workspacePath: workspace.currentWorkspace.path
-      });
-      setWorkspace(prev => ({ ...prev, files }));
+      const files = await invoke<WorkspaceFile[]>('list_workspace_files', { workspacePath });
+      if (isCurrent()) {
+        setWorkspace(prev => prev.currentWorkspace?.path === workspacePath ? { ...prev, files } : prev);
+      }
     } catch (error) {
-      console.error('Failed to refresh files:', error);
+      if (isCurrent()) {
+        console.error('Failed to refresh files:', error);
+        setWorkspace(prev => prev.currentWorkspace?.path === workspacePath
+          ? { ...prev, error: `Could not refresh files: ${errorMessage(error)}` }
+          : prev);
+      }
+    } finally {
+      finishLoading(request);
     }
-  }, [workspace.currentWorkspace]);
+  }, [workspace.currentWorkspace, startLoading, finishLoading]);
 
   const refreshEnvFiles = useCallback(async () => {
-    if (!isTauri() || !workspace.currentWorkspace) return;
+    if (!isTauri() || !workspace.currentWorkspace || opening.current) return;
+    const workspacePath = workspace.currentWorkspace.path;
+    const version = navigationVersion.current;
+    const request = startLoading();
+    latestEnvRefresh.current = request;
+    setWorkspace(prev => ({ ...prev, error: null }));
+    const isCurrent = () => navigationVersion.current === version && latestEnvRefresh.current === request;
 
     try {
-      const envFiles = await invoke<WorkspaceFile[]>('list_env_files', {
-        workspacePath: workspace.currentWorkspace.path
-      });
-      setWorkspace(prev => ({ ...prev, envFiles }));
+      const envFiles = await invoke<WorkspaceFile[]>('list_env_files', { workspacePath });
+      if (isCurrent()) {
+        setWorkspace(prev => prev.currentWorkspace?.path === workspacePath ? { ...prev, envFiles } : prev);
+      }
     } catch (error) {
-      console.error('Failed to refresh env files:', error);
+      if (isCurrent()) {
+        console.error('Failed to refresh env files:', error);
+        setWorkspace(prev => prev.currentWorkspace?.path === workspacePath
+          ? { ...prev, error: `Could not refresh environment files: ${errorMessage(error)}` }
+          : prev);
+      }
+    } finally {
+      finishLoading(request);
     }
-  }, [workspace.currentWorkspace]);
+  }, [workspace.currentWorkspace, startLoading, finishLoading]);
 
   const createFile = useCallback(async (name: string, parentPath?: string): Promise<string | null> => {
     if (!isTauri() || !workspace.currentWorkspace) return null;

@@ -41,7 +41,7 @@ function EnvEditorInner({ initialContent, onContentChange }: EnvEditorInnerProps
   } = useEnvEditor();
 
   const { success } = useToast();
-  const { registerContentGetter, setOriginalContent } = useDocument();
+  const { registerContentGetter, setOriginalContent, isHome } = useDocument();
 
   // Track the serialized form of the initial content (after parsing and re-serializing)
   // This ensures we compare apples-to-apples since raw file content may serialize differently
@@ -153,8 +153,9 @@ function EnvEditorInner({ initialContent, onContentChange }: EnvEditorInnerProps
     success(`Exported as ${format.toUpperCase()}`);
   }, [state.document.variables, success]);
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts only while the editor is visible.
   useEffect(() => {
+    if (isHome) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if not in an input
       const target = e.target as HTMLElement;
@@ -196,7 +197,7 @@ function EnvEditorInner({ initialContent, onContentChange }: EnvEditorInnerProps
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectAll, deleteSelected, clearSelection, setEditing, state.selectedIds.size, handleCopySelected, importFromClipboard]);
+  }, [selectAll, deleteSelected, clearSelection, setEditing, state.selectedIds.size, handleCopySelected, importFromClipboard, isHome]);
 
   // Handle delete for single variable
   const handleDeleteVariable = useCallback((id: string) => {

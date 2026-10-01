@@ -68,7 +68,7 @@ interface AcceptedRevision {
 export default function BlockEditor() {
   const { settings } = useSettings();
   const { state, requestReview, requestRewrite, setActiveSuggestion, acceptSuggestion, dismissSuggestion, clearSuggestions, updateSuggestions } = useMiku();
-  const { setContent: setDocContent, activeDocumentId, registerContentGetter, openDocuments } = useDocument();
+  const { setContent: setDocContent, activeDocumentId, registerContentGetter, openDocuments, isHome } = useDocument();
 
   // Keyboard sounds integration
   const { playKeySound } = useKeyboardSounds();
@@ -1044,6 +1044,7 @@ export default function BlockEditor() {
 
   // Listen for events from FloatingBar and keyboard shortcuts
   useEffect(() => {
+    if (isHome) return;
     const handleUndoEvent = () => handleUndo();
     const handlePreviewToggle = () => setIsPreviewMode(prev => !prev);
     const handleAcceptAllEvent = () => handleAcceptAll();
@@ -1081,7 +1082,7 @@ export default function BlockEditor() {
       window.removeEventListener('miku:declineAll', handleDeclineAllEvent);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleUndo, handleAcceptAll, handleDeclineAll, handleRewriteSelection]);
+  }, [handleUndo, handleAcceptAll, handleDeclineAll, handleRewriteSelection, isHome]);
 
   // Emit state changes so FloatingBar can update
   useEffect(() => {
