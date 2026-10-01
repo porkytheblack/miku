@@ -23,6 +23,10 @@ interface DocumentContextType {
   document: DocumentState;
   openDocuments: OpenDocument[];
   activeDocumentId: string | null;
+  isHome: boolean;
+  showHome: () => void;
+  isOpeningDocument: boolean;
+  documentError: string | null;
   setContent: (content: string) => void;
   setContentForDocument: (docId: string, content: string) => void;
   setOriginalContent: (content: string) => void;
@@ -81,26 +85,50 @@ function slugify(text: string): string {
 }
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
-  const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>([
+  const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>(() => [
     { id: generateDocId(), path: null, content: '', originalContent: '', isModified: false }
   ]);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(openDocuments[0]?.id || null);
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
+  const [isHome, setIsHome] = useState(true);
+  const [isOpeningDocument, setIsOpeningDocument] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const openingDocumentRef = useRef(false);
+  const openingPathRef = useRef<string | undefined>(undefined);
+  const pendingOpensRef = useRef<Array<{ path: string; navigation: number; resolve: () => void }>>([]);
+  // A completed file read must not undo a newer navigation back to Home.
+  const navigationRef = useRef(0);
 
   // Ref to hold the content getter function from BlockEditor
-  const contentGetterRef = useRef<(() => string) | null>(null);
+  const contentGetterRef = useRef<{ documentId: string | null; getContent: () => string } | null>(null);
 
   const registerContentGetter = useCallback((getter: () => string) => {
-    contentGetterRef.current = getter;
-  }, []);
+    contentGetterRef.current = { documentId: activeDocumentId, getContent: getter };
+  }, [activeDocumentId]);
+
+  const readCurrentBuffer = useCallback(() => {
+    const registered = contentGetterRef.current;
+    return registered?.documentId === activeDocumentId ? registered.getContent() : undefined;
+  }, [activeDocumentId]);
+
+  const captureCurrentBuffer = useCallback(() => {
+    const content = readCurrentBuffer();
+    if (activeDocumentId && content !== undefined) {
+      setOpenDocuments(prev => prev.map(doc => doc.id === activeDocumentId
+        ? { ...doc, content, isModified: content !== doc.originalContent }
+        : doc));
+    }
+  }, [activeDocumentId, readCurrentBuffer]);
 
   const sessionRestoredRef = useRef(false);
+  const [isSessionLoaded, setIsSessionLoaded] = useState(false);
 
   // Restore session on mount (only once, only in Tauri)
   useEffect(() => {
     if (sessionRestoredRef.current || !isTauri()) return;
     sessionRestoredRef.current = true;
 
+    const navigation = navigationRef.current;
     (async () => {
       try {
         const session = await loadSession();
@@ -129,20 +157,31 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         }
 
         if (restoredDocs.length > 0) {
-          setOpenDocuments(restoredDocs);
-          const activeIdx = Math.min(session.active_index, restoredDocs.length - 1);
-          setActiveDocumentId(restoredDocs[activeIdx].id);
+          if (navigation === navigationRef.current) {
+            setOpenDocuments(restoredDocs);
+            const activeIdx = Math.max(0, Math.min(session.active_index, restoredDocs.length - 1));
+            setActiveDocumentId(restoredDocs[activeIdx].id);
+          } else {
+            // Startup can overlap a new document or a return Home. Keep those
+            // choices, but never discard restored drafts that have no disk copy.
+            setOpenDocuments(prev => [
+              ...prev,
+              ...restoredDocs.filter(restored => !restored.path || !prev.some(doc => doc.path === restored.path)),
+            ]);
+          }
         }
       } catch (err) {
         console.error('Failed to restore session:', err);
+      } finally {
+        setIsSessionLoaded(true);
       }
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist session whenever tabs change (debounced)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!isTauri() || !sessionRestoredRef.current) return;
+    if (!isTauri() || !isSessionLoaded) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
@@ -155,11 +194,11 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }, 500);
 
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [openDocuments, activeDocumentId]);
+  }, [openDocuments, activeDocumentId, isSessionLoaded]);
 
   // Save session on window close
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || !isSessionLoaded) return;
 
     const handleBeforeUnload = () => {
       const activeIdx = openDocuments.findIndex(d => d.id === activeDocumentId);
@@ -173,16 +212,15 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [openDocuments, activeDocumentId]);
+  }, [openDocuments, activeDocumentId, isSessionLoaded]);
 
   const getEditorContent = useCallback((): string => {
-    if (contentGetterRef.current) {
-      return contentGetterRef.current();
-    }
+    const buffer = readCurrentBuffer();
+    if (buffer !== undefined) return buffer;
     // Fallback to context content if no getter registered
     const activeDoc = openDocuments.find(d => d.id === activeDocumentId);
     return activeDoc?.content || '';
-  }, [openDocuments, activeDocumentId]);
+  }, [openDocuments, activeDocumentId, readCurrentBuffer]);
 
   // Get the active document
   const activeDocument = openDocuments.find(d => d.id === activeDocumentId);
@@ -250,12 +288,33 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     setRecentFiles(files);
   }, []);
 
-  const openDocument = useCallback(async (path?: string) => {
+  const showHome = useCallback(() => {
+    navigationRef.current += 1;
+    captureCurrentBuffer();
+    setDocumentError(null);
+    setIsHome(true);
+  }, [captureCurrentBuffer]);
+
+  const openDocument = useCallback(async (path?: string, requestedNavigation?: number) => {
     if (!isTauri()) {
       // In browser mode, we can't open files from disk
-      console.log('File opening not available in browser mode');
+      setDocumentError('Open files in the Miku desktop app. You can still create a new document here.');
       return;
     }
+
+    if (openingDocumentRef.current) {
+      // Dialog double-clicks and duplicate file clicks should be ignored, but
+      // separate OS file-open events must all reach a tab.
+      if (!path || path === openingPathRef.current || pendingOpensRef.current.some(item => item.path === path)) return;
+      return new Promise<void>(resolve => {
+        pendingOpensRef.current.push({ path, navigation: ++navigationRef.current, resolve });
+      });
+    }
+    openingDocumentRef.current = true;
+    openingPathRef.current = path;
+    const navigation = requestedNavigation ?? ++navigationRef.current;
+    setIsOpeningDocument(true);
+    setDocumentError(null);
 
     try {
       let filePath = path;
@@ -291,7 +350,11 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       // Check if the file is already open
       const existingDoc = openDocuments.find(d => d.path === filePath);
       if (existingDoc) {
-        setActiveDocumentId(existingDoc.id);
+        if (navigation === navigationRef.current) {
+          captureCurrentBuffer();
+          setActiveDocumentId(existingDoc.id);
+          setIsHome(false);
+        }
         return;
       }
 
@@ -307,14 +370,32 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         isModified: false,
       };
 
-      setOpenDocuments(prev => [...prev, newDoc]);
-      setActiveDocumentId(newDoc.id);
+      if (navigation === navigationRef.current) captureCurrentBuffer();
+      setOpenDocuments(prev => {
+        // Session restoration may have opened this path while disk I/O was
+        // pending. Reuse that tab instead of creating two editable copies.
+        const existing = prev.find(item => item.path === newDoc.path);
+        if (navigation === navigationRef.current) {
+          setActiveDocumentId(existing?.id ?? newDoc.id);
+          setIsHome(false);
+        }
+        return existing ? prev : [...prev, newDoc];
+      });
 
       await loadRecentFiles();
     } catch (error) {
       console.error('Failed to open file:', error);
+      if (navigation === navigationRef.current) {
+        setDocumentError('Could not open this file. Check that it still exists and that you have permission to read it.');
+      }
+    } finally {
+      openingDocumentRef.current = false;
+      openingPathRef.current = undefined;
+      setIsOpeningDocument(false);
+      const next = pendingOpensRef.current.shift();
+      if (next) void openDocumentRef.current(next.path, next.navigation).finally(next.resolve);
     }
-  }, [openDocuments, loadRecentFiles]);
+  }, [openDocuments, loadRecentFiles, captureCurrentBuffer]);
 
   // Listen for OS-driven file-open events (file association double-click,
   // `open foo.md` from the shell, etc.). Rust emits `miku://open-file` with
@@ -411,8 +492,11 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, [activeDocument, activeDocumentId, loadRecentFiles]);
 
   const newDoc = useCallback(() => {
+    navigationRef.current += 1;
+    setIsHome(false);
+    setDocumentError(null);
     // Save current document's content before switching to new document
-    const contentToSave = contentGetterRef.current ? contentGetterRef.current() : undefined;
+    const contentToSave = readCurrentBuffer();
 
     const newDocument: OpenDocument = {
       id: generateDocId(),
@@ -437,14 +521,17 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     });
 
     setActiveDocumentId(newDocument.id);
-  }, [activeDocumentId]);
+  }, [activeDocumentId, readCurrentBuffer]);
 
   const switchToDocument = useCallback((id: string, currentContent?: string) => {
     const doc = openDocuments.find(d => d.id === id);
     if (!doc) return;
+    navigationRef.current += 1;
+    setIsHome(false);
+    setDocumentError(null);
 
     // If no content provided, try to get it from the content getter
-    const contentToSave = currentContent ?? (contentGetterRef.current ? contentGetterRef.current() : undefined);
+    const contentToSave = currentContent ?? (readCurrentBuffer());
 
     // Save current content to the old document before switching
     if (activeDocumentId && contentToSave !== undefined) {
@@ -456,11 +543,11 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }
 
     setActiveDocumentId(id);
-  }, [openDocuments, activeDocumentId]);
+  }, [openDocuments, activeDocumentId, readCurrentBuffer]);
 
   const closeDocument = useCallback((id: string, currentContent?: string) => {
     // If no content provided, try to get it from the content getter
-    const contentToSave = currentContent ?? (contentGetterRef.current ? contentGetterRef.current() : undefined);
+    const contentToSave = currentContent ?? (readCurrentBuffer());
 
     // If closing a non-active document and we have current content, save it first
     if (activeDocumentId && activeDocumentId !== id && contentToSave !== undefined) {
@@ -492,7 +579,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
 
       return newDocs;
     });
-  }, [activeDocumentId]);
+  }, [activeDocumentId, readCurrentBuffer]);
 
   return (
     <DocumentContext.Provider
@@ -500,6 +587,10 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         document,
         openDocuments,
         activeDocumentId,
+        isHome,
+        showHome,
+        isOpeningDocument,
+        documentError,
         setContent,
         setContentForDocument,
         setOriginalContent,

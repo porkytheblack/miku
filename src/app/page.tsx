@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import EditorSwitcher from "@/components/EditorSwitcher";
 import FloatingBar from "@/components/FloatingBar";
-import WorkspaceSelector from "@/components/WorkspaceSelector";
+import HomeOverview from "@/components/HomeOverview";
 import FileBrowser from "@/components/FileBrowser";
 import TopBar from "@/components/TopBar";
 import SoundNotifier from "@/components/SoundNotifier";
@@ -36,12 +36,17 @@ export default function Home() {
   const [isAgentChatFileDialogOpen, setIsAgentChatFileDialogOpen] = useState(false);
 
   const { workspace, createFile } = useWorkspace();
-  const { openDocument, openDocuments, switchToDocument } = useDocument();
+  const { openDocument, openDocuments, switchToDocument, activeDocumentId, isHome } = useDocument();
 
-  // Toggle file browser with Cmd+B
+  // Opening the sidebar from Home returns to the current editor.
   const handleToggleFileBrowser = useCallback(() => {
-    setIsFileBrowserOpen(prev => !prev);
-  }, []);
+    if (isHome && activeDocumentId) {
+      switchToDocument(activeDocumentId);
+      setIsFileBrowserOpen(true);
+    } else {
+      setIsFileBrowserOpen(prev => !prev);
+    }
+  }, [isHome, activeDocumentId, switchToDocument]);
 
   // Toggle command palette with Cmd+K
   const handleToggleCommandPalette = useCallback(() => {
@@ -166,7 +171,7 @@ export default function Home() {
       // No Shift required, doesn't conflict with browser shortcuts
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault();
-        setIsFileBrowserOpen(prev => !prev);
+        handleToggleFileBrowser();
       }
 
       // Cmd+1 through Cmd+9: Switch to tab by position
@@ -188,7 +193,7 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openDocuments, switchToDocument]);
+  }, [openDocuments, switchToDocument, handleToggleFileBrowser]);
 
   return (
     <main className="relative h-screen flex flex-col overflow-hidden">
@@ -196,7 +201,6 @@ export default function Home() {
       <AutoSaveManager />
       <SoundNotifier />
       <UpdateNotification />
-      <WorkspaceSelector />
       <TopBar
         onToggleFileBrowser={handleToggleFileBrowser}
         onToggleCommandPalette={handleToggleCommandPalette}
@@ -204,12 +208,16 @@ export default function Home() {
       />
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileBrowser
-          isOpen={isFileBrowserOpen}
+          isOpen={!isHome && isFileBrowserOpen}
           onClose={() => setIsFileBrowserOpen(false)}
           onRequestConfirm={handleRequestConfirm}
         />
-        <div className="flex-1 overflow-auto min-h-0">
-          <EditorSwitcher />
+        <div className="flex-1 overflow-auto min-h-0 min-w-0">
+          {isHome && <HomeOverview />}
+          {/* Keep editor instances and their undo/selection/chat state alive on Home. */}
+          <div hidden={isHome} inert={isHome} style={{ height: '100%' }}>
+            <EditorSwitcher />
+          </div>
         </div>
       </div>
       <FloatingBar
