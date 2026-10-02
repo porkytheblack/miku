@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useDocument } from '@/context/DocumentContext';
 import { isTauri } from '@/lib/tauri';
 import { getFileTypeFromPath } from '@/lib/fileTypes';
+import { readingTimeMinutes } from '@/lib/readingTime';
 import type { FileType } from '@/types';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
@@ -114,6 +115,10 @@ function TabIcon({ fileType, isActive }: { fileType: FileType; isActive: boolean
 export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, onToggleSettings }: TopBarProps) {
   const { openDocuments, activeDocumentId, switchToDocument, closeDocument, newDoc } = useDocument();
   const [isMounted, setIsMounted] = useState(false);
+
+  // Live reading time for the active document's buffer content (includes unsaved edits).
+  const activeDoc = openDocuments.find((doc) => doc.id === activeDocumentId);
+  const readingTime = readingTimeMinutes(activeDoc?.content ?? '');
 
   // Only check isTauri after mount to avoid hydration mismatch
   useEffect(() => {
@@ -316,6 +321,22 @@ export default function TopBar({ onToggleFileBrowser, onToggleCommandPalette, on
           flexShrink: 0,
         }}
       >
+        {/* Reading time indicator (hidden on empty documents) */}
+        {readingTime !== null && (
+          <span
+            aria-label="Reading time"
+            style={{
+              color: 'var(--text-tertiary)',
+              fontSize: '12px',
+              whiteSpace: 'nowrap',
+              marginRight: '6px',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {readingTime} min read
+          </span>
+        )}
+
         {/* Command palette button */}
         {onToggleCommandPalette && (
           <button
