@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import HomeOverview from '../HomeOverview';
+import HomeOverview, { resetHomeViewStore } from '../HomeOverview';
 import { useWorkspace, type WorkspaceFile } from '@/context/WorkspaceContext';
 import { useDocument } from '@/context/DocumentContext';
 import { isTauri } from '@/lib/tauri';
@@ -27,6 +27,7 @@ const files: WorkspaceFile[] = [
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetHomeViewStore();
   workspace = {
     workspace: {
       currentWorkspace: { name: 'Project', path: '/project' }, files,
@@ -212,5 +213,27 @@ describe('Home overview', () => {
     expect(screen.getByRole('button', { name: 'Open Folder' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Open File' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'New Document' })).toBeEnabled();
+  });
+
+  it('restores the last filter and folder expansion when returning Home', () => {
+    const { unmount } = render(<HomeOverview />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter files' }), { target: { value: 'launch' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    unmount();
+
+    render(<HomeOverview />);
+    expect(screen.getByRole('searchbox', { name: 'Filter files' })).toHaveValue('launch');
+    expect(screen.getByRole('button', { name: 'Launch.miku-kanban' })).toBeInTheDocument();
+  });
+
+  it('keeps the view separate per workspace', () => {
+    const { rerender } = render(<HomeOverview />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter files' }), { target: { value: 'launch' } });
+
+    workspace.workspace.currentWorkspace = { name: 'Other', path: '/other' };
+    rerender(<HomeOverview />);
+    expect(screen.getByRole('searchbox', { name: 'Filter files' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'README.md' })).toBeInTheDocument();
   });
 });

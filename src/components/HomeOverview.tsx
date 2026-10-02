@@ -1,12 +1,38 @@
 'use client';
 
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useCallback, useSyncExternalStore } from 'react';
 import { useWorkspace, type WorkspaceFile } from '@/context/WorkspaceContext';
 import { useDocument } from '@/context/DocumentContext';
 import { isTauri } from '@/lib/tauri';
 import styles from './HomeOverview.module.css';
 
 const subscribe = () => () => {};
+
+// The Home view unmounts when the user opens a document and remounts when they
+// return. Persist the last filter and folder expansion per workspace so a
+// return Home resumes exactly where the user left off.
+interface HomeViewSnapshot {
+  filter: string;
+  expanded: string[];
+}
+const homeViewStore = new Map<string, HomeViewSnapshot>();
+
+function readHomeView(key: string): HomeViewSnapshot | undefined {
+  return homeViewStore.get(key);
+}
+
+function writeHomeView(key: string, snapshot: HomeViewSnapshot): void {
+  if (snapshot.filter.trim() === '' && snapshot.expanded.length === 0) {
+    homeViewStore.delete(key);
+  } else {
+    homeViewStore.set(key, snapshot);
+  }
+}
+
+/** Test seam: clear the per-workspace Home view cache between tests. */
+export function resetHomeViewStore(): void {
+  homeViewStore.clear();
+}
 
 function FolderIcon() {
   return (
@@ -33,15 +59,15 @@ function filterFiles(files: WorkspaceFile[], query: string): WorkspaceFile[] {
   });
 }
 
-function FileList({ files, onOpen, disabled, filtering, depth = 0 }: {
+function FileList({ files, onOpen, disabled, filtering, expanded, onToggle, depth = 0 }: {
   files: WorkspaceFile[];
   onOpen: (path: string) => Promise<void>;
   disabled: boolean;
   filtering: boolean;
+  expanded: Set<string>;
+  onToggle: (path: string) => void;
   depth?: number;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
   return (
     <ul className={styles.fileList}>
       {files.map(file => {
@@ -60,12 +86,7 @@ function FileList({ files, onOpen, disabled, filtering, depth = 0 }: {
                   void onOpen(file.path);
                   return;
                 }
-                setExpanded(prev => {
-                  const next = new Set(prev);
-                  if (next.has(file.path)) next.delete(file.path);
-                  else next.add(file.path);
-                  return next;
-                });
+                onToggle(file.path);
               }}
             >
               <span className={styles.fileIcon}>{file.isDirectory ? <FolderIcon /> : <FileIcon />}</span>
@@ -74,7 +95,7 @@ function FileList({ files, onOpen, disabled, filtering, depth = 0 }: {
             </button>
             {file.isDirectory && isExpanded && (
               file.children?.length ? (
-                <FileList files={file.children} onOpen={onOpen} disabled={disabled} filtering={filtering} depth={depth + 1} />
+                <FileList files={file.children} onOpen={onOpen} disabled={disabled} filtering={filtering} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
               ) : <p className={styles.emptyFolder} style={{ paddingLeft: `${54 + depth * 20}px` }}>No Miku files in this folder</p>
             )}
           </li>
@@ -88,7 +109,37 @@ export default function HomeOverview() {
   const { workspace, selectWorkspace, openWorkspace, refreshFiles, refreshEnvFiles } = useWorkspace();
   const { openDocument, newDoc, openDocuments, switchToDocument, isOpeningDocument, documentError } = useDocument();
   const inTauri = useSyncExternalStore(subscribe, isTauri, () => false);
-  const [filter, setFilter] = useState('');
+  const workspacePath = workspace.currentWorkspace?.path ?? '';
+  const [filter, setFilter] = useState(() => readHomeView(workspacePath)?.filter ?? '');
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(readHomeView(workspacePath)?.expanded ?? []));
+
+  // Reset to the persisted view whenever the active workspace changes.
+  const [previousWorkspacePath, setPreviousWorkspacePath] = useState(workspacePath);
+  if (previousWorkspacePath !== workspacePath) {
+    setPreviousWorkspacePath(workspacePath);
+    setFilter(readHomeView(workspacePath)?.filter ?? '');
+    setExpanded(new Set(readHomeView(workspacePath)?.expanded ?? []));
+  }
+
+  const persistView = useCallback((nextFilter: string, nextExpanded: Set<string>) => {
+    writeHomeView(workspacePath, { filter: nextFilter, expanded: [...nextExpanded] });
+  }, [workspacePath]);
+
+  const handleFilterChange = useCallback((value: string) => {
+    setFilter(value);
+    persistView(value, expanded);
+  }, [expanded, persistView]);
+
+  const toggleFolder = useCallback((path: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      persistView(filter, next);
+      return next;
+    });
+  }, [filter, persistView]);
+
   const query = filter.trim().toLowerCase();
   const busy = workspace.isLoading || isOpeningDocument;
   const files = useMemo(() => [...workspace.files, ...workspace.envFiles], [workspace.files, workspace.envFiles]);
@@ -177,7 +228,7 @@ export default function HomeOverview() {
           </div>
           {workspace.currentWorkspace && (
             <div className={styles.filter}>
-              <input aria-label="Filter files" type="search" placeholder="Filter files…" value={filter} onChange={event => setFilter(event.target.value)} />
+              <input aria-label="Filter files" type="search" placeholder="Filter files…" value={filter} onChange={event => handleFilterChange(event.target.value)} />
             </div>
           )}
           {workspace.isLoading ? (
@@ -193,10 +244,10 @@ export default function HomeOverview() {
               <FileIcon />
               <h3>{query ? 'No matching files' : 'No Miku files yet'}</h3>
               <p>{query ? 'Try another name or clear your filter.' : 'Markdown, boards, docs, chats, and environment files will appear here.'}</p>
-              {query && <button className={styles.button} type="button" onClick={() => setFilter('')}>Clear filter</button>}
+              {query && <button className={styles.button} type="button" onClick={() => handleFilterChange('')}>Clear filter</button>}
             </div>
           ) : (
-            <FileList key={workspace.currentWorkspace.path} files={visibleFiles} onOpen={openDocument} disabled={busy} filtering={Boolean(query)} />
+            <FileList key={workspace.currentWorkspace.path} files={visibleFiles} onOpen={openDocument} disabled={busy} filtering={Boolean(query)} expanded={expanded} onToggle={toggleFolder} />
           )}
         </section>
       </div>
